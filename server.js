@@ -3,10 +3,15 @@ const bodyParser = require('body-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const perplexityAgent = require('./services/perplexityAgent');
+const googleCalendar = require('./services/googleCalendar');
+const userManager = require('./db/userManager');
+const cliqCards = require('./services/cliqCards');
 require('dotenv').config();
 
 const app = express();
 
+app.set('trust proxy', 1); 
 // Security middleware
 app.use(helmet()); // Adds security headers
 app.use(bodyParser.json());
@@ -91,44 +96,198 @@ app.get('/', (req, res) => {
   });
 });
 
+
+// OAuth: Start Google Calendar connection
+app.get('/connect-calendar', (req, res) => {
+  const userId = req.query.user_id || 'demo_user';
+  const authUrl = googleCalendar.getAuthUrl(userId);
+  
+  res.redirect(authUrl);
+});
+
+// OAuth: Google callback
+app.get('/oauth/callback', async (req, res) => {
+  const { code, state } = req.query;
+  const userId = state || 'demo_user';
+  
+  if (!code) {
+    return res.send('❌ Authorization failed. No code received.');
+  }
+  
+  const result = await googleCalendar.exchangeCodeForTokens(code);
+  
+  if (result.success) {
+    userManager.saveUserTokens(userId, result.tokens);
+    
+    res.send(`
+      <html>
+        <body style="font-family: Arial; text-align: center; padding: 50px;">
+          <h1>✅ Calendar Connected Successfully!</h1>
+          <p>You can now close this window and return to Zoho Cliq.</p>
+          <p>Try: "Schedule meeting tomorrow at 3 PM"</p>
+        </body>
+      </html>
+    `);
+  } else {
+    res.send(`❌ Failed to connect: ${result.error}`);
+  }
+});
+
+
 // Bot message handler (with verification)
+// Bot message handler (with AI integration)
+// Bot message handler (with AI + Google Calendar integration)
 app.post('/bot', verifyCliqRequest, async (req, res) => {
   try {
-    console.log('Bot message received');
+    console.log('📨 Bot message received');
     
     // Extract and sanitize user input
     const userMessage = sanitizeInput(req.body.text || '');
-    const userId = req.body.user?.id || 'unknown';
+    const userId = req.body.user?.id || req.body.user?.email || 'test_user'; // Use test_user as fallback
     const userName = sanitizeInput(req.body.user?.name || 'User');
     
-    // Log for security audit
-    console.log(`User: ${userId} | Message: ${userMessage.substring(0, 50)}...`);
+    console.log(`👤 User: ${userId} | Message: ${userMessage.substring(0, 50)}...`);
     
     // Validate input
-    if (!userMessage) {
+    if (!userMessage || userMessage.length < 3) {
       return res.json({
-        text: 'Please provide a message.'
+        text: '⚠️ Please provide a message. Example: "Schedule meeting tomorrow at 3 PM"'
+      });
+    }
+
+    // ========================================
+    // CHECK IF USER HAS CONNECTED CALENDAR
+    // ========================================
+    
+    const isConnected = userManager.isUserConnected(userId);
+    
+    if (!isConnected) {
+      const connectUrl = `${process.env.NGROK_URL}/connect-calendar?user_id=${userId}`;
+      
+      return res.json({
+        text: `🔗 Please connect your Google Calendar first!\n\n` +
+              `Click here to connect: ${connectUrl}\n\n` +
+              `After connecting, try your request again.`
+      });
+    }
+
+    // ========================================
+    // 🧠 AI PROCESSING WITH PERPLEXITY
+    // ========================================
+    
+    console.log('🤖 Processing with Perplexity AI...');
+    
+    const userContext = {
+      timezone: 'Asia/Kolkata',
+      workHours: '09:00-18:00'
+    };
+    
+    const aiResult = await perplexityAgent.extractEventDetails(userMessage, userContext);
+    
+    if (!aiResult.success) {
+      return res.json({
+        text: `❌ I couldn't understand that. Please try:\n\n` +
+              `• "Schedule meeting with team tomorrow at 3 PM"\n` +
+              `• "Block 2 hours Friday afternoon for project work"\n` +
+              `• "Remind me to submit report by next Monday"`
       });
     }
     
-    if (userMessage.length < 3) {
+    const event = aiResult.event;
+    
+    // ========================================
+    // 📅 CHECK CALENDAR AVAILABILITY
+    // ========================================
+    
+    console.log('📅 Checking calendar availability...');
+    
+    const userTokens = userManager.getUserTokens(userId);
+    const endTime = calculateEndTime(event.time, event.duration);
+    
+    const availabilityCheck = await googleCalendar.checkAvailability(
+      userTokens,
+      event.date,
+      event.time,
+      endTime
+    );
+    
+    if (!availabilityCheck.success) {
       return res.json({
-        text: 'Message too short. Please describe what you want to schedule.'
+        text: `⚠️ Could not check calendar: ${availabilityCheck.error}`
       });
     }
     
-    // Simple test response (AI logic will be added later)
-    res.json({
-      text: `Secure message received from ${userName}!\n\nYou said: "${userMessage}"\n\nAll security checks passed.`
-    });
+    // ========================================
+    // ⚠️ HANDLE CONFLICTS
+    // ========================================
+    
+    if (!availabilityCheck.available) {
+      return res.json({
+        text: `⚠️ **Time Slot Conflict!**\n\n` +
+              `You already have something scheduled at ${event.time} on ${formatDate(event.date)}.\n\n` +
+              `Busy slots:\n` +
+              availabilityCheck.busySlots.map(slot => 
+                `• ${new Date(slot.start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ` +
+                `${new Date(slot.end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+              ).join('\n') +
+              `\n\nWould you like to:\n` +
+              `1. Choose a different time\n` +
+              `2. Override and schedule anyway`
+      });
+    }
+    
+    // ========================================
+    // ✅ CREATE CALENDAR EVENT
+    // ========================================
+    
+    console.log('📤 Creating calendar event...');
+    
+    const createResult = await googleCalendar.createCalendarEvent(userTokens, event);
+    
+    if (!createResult.success) {
+      return res.json({
+        text: `❌ Failed to create event: ${createResult.error}`
+      });
+    }
+    
+    // ========================================
+    // 🎉 SUCCESS RESPONSE
+    // ========================================
+    
+    const successCard = cliqCards.buildSuccessCard(event, createResult.eventLink, endTime);
+    res.json(successCard);
     
   } catch (error) {
-    console.error('Error in bot handler:', error);
+    console.error('❌ Error in bot handler:', error);
     res.status(500).json({
-      text: 'An error occurred. Please try again.'
+      text: '⚠️ An error occurred. Please try again.'
     });
   }
 });
+
+// Helper function to calculate end time
+function calculateEndTime(startTime, durationHours) {
+  const [hours, minutes] = startTime.split(':').map(Number);
+  const endHours = hours + Math.floor(durationHours);
+  const endMinutes = minutes + ((durationHours % 1) * 60);
+  
+  return `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+}
+
+
+// Helper function to format dates nicely
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+}
+
+
+
 
 // Command handler (with verification)
 app.post('/command', verifyCliqRequest, async (req, res) => {
@@ -171,3 +330,4 @@ app.listen(PORT, () => {
   console.log(`   Rate Limiting: ENABLED `);
   console.log(`\n Make sure to set CLIQ_APP_KEY in .env file\n`);
 });
+
