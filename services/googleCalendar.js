@@ -171,6 +171,7 @@ function calculateEndTime(startTime, durationHours) {
 }
 
 module.exports = {
+  getOAuthClient,   
   getAuthUrl,
   exchangeCodeForTokens,
   checkAvailability,

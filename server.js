@@ -7,6 +7,7 @@ const perplexityAgent = require('./services/perplexityAgent');
 const googleCalendar = require('./services/googleCalendar');
 const userManager = require('./db/userManager');
 const cliqCards = require('./services/cliqCards');
+const commandHandlers = require('./services/commandHandlers');
 require('dotenv').config();
 
 const app = express();
@@ -308,6 +309,58 @@ app.post('/command', verifyCliqRequest, async (req, res) => {
     });
   }
 });
+
+// Slash command: /today
+app.post('/command/today', verifyCliqRequest, async (req, res) => {
+  try {
+    const userId = req.body.user?.id || 'test_user';
+    const result = await commandHandlers.handleTodayCommand(userId);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in /today command:', error);
+    res.json({ text: '❌ Error processing command' });
+  }
+});
+
+// Slash command: /week
+app.post('/command/week', verifyCliqRequest, async (req, res) => {
+  try {
+    const userId = req.body.user?.id || 'test_user';
+    const result = await commandHandlers.handleWeekCommand(userId);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in /week command:', error);
+    res.json({ text: '❌ Error processing command' });
+  }
+});
+
+
+// Slash command: /delete
+app.post('/command/delete', verifyCliqRequest, async (req, res) => {
+  try {
+    const userId = req.body.user?.id || 'test_user';
+    const commandArgs = req.body.arguments || '';
+    const result = await commandHandlers.handleDeleteCommand(userId, commandArgs);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in /delete command:', error);
+    res.json({ text: '❌ Error processing command' });
+  }
+});
+
+// Slash command: /update
+app.post('/command/update', verifyCliqRequest, async (req, res) => {
+  try {
+    const userId = req.body.user?.id || 'test_user';
+    const commandArgs = req.body.arguments || '';
+    const result = await commandHandlers.handleUpdateCommand(userId, commandArgs);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in /update command:', error);
+    res.json({ text: '❌ Error processing command' });
+  }
+});
+
 
 // 404 handler
 app.use((req, res) => {
