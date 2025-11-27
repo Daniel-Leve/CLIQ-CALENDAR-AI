@@ -181,21 +181,26 @@ function buildWorkLifeBalanceCard(metrics) {
 
   response.slides = slides;
 
-  // Button
-  const buttons = [];
-  
-  const btn = {};
-  btn.label = "📈 Full Report"; // 13 chars ✅
-  btn.type = "+";
-  btn.action = {
-    type: "invoke.function",
-    data: { action: "detailed_report" }
-  };
-  buttons.push(btn);
+ // Button - Fixed format
+const buttons = [];
 
-  response.buttons = buttons;
+const btn = {};
+btn.label = "📈 Full Report";
+btn.type = "+";
 
-  return response;
+const action = {};
+action.type = "invoke.function";
+
+// For invoke.function, data should not have 'action' nested
+// Just pass the data directly
+const actionData = {};
+actionData.command = "detailed_report";  // ← Changed from 'action' to 'command'
+action.data = actionData;
+
+btn.action = action;
+buttons.push(btn);
+
+response.buttons = buttons;
 }
 
 /**

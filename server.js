@@ -361,6 +361,39 @@ app.post('/command/update', verifyCliqRequest, async (req, res) => {
   }
 });
 
+// Slash command: /balance
+// Slash command: /balance
+app.post('/command/balance', verifyCliqRequest, async (req, res) => {
+  try {
+    console.log('📨 Received /balance request');
+    
+    const userId = req.body.user?.id || 'test_user';
+    console.log('👤 User ID:', userId);
+    
+    const result = await commandHandlers.handleBalanceCommand(userId);
+
+    
+    
+    console.log('✅ Result type:', typeof result);
+    console.log('✅ Result:', result);
+    
+    if (result && result.text) {
+      console.log('✅ Sending response to Cliq');
+      res.json(result);
+    } else {
+      console.log('⚠️ No valid result, sending fallback');
+      res.json({ text: '❌ No data available' });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error in /balance command:', error);
+    console.error('Stack:', error.stack);
+    res.json({ text: '❌ Error processing command: ' + error.message });
+  }
+});
+
+
+
 
 // 404 handler
 app.use((req, res) => {

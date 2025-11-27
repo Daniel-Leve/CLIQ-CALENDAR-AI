@@ -2,6 +2,7 @@ const googleCalendar = require('./googleCalendar');
 const userManager = require('../db/userManager');
 const cliqCards = require('./cliqCards');
 const perplexityAgent = require('./perplexityAgent');
+const workLifeBalanceAI = require('./workLifeBalanceAI');
 /**
  * Handle /today command - Show today's schedule
  */
@@ -455,11 +456,110 @@ async function handleUpdateCommand(userId, commandArgs) {
   }
 }
 
+// ... existing functions ...
+
+/**
+ * Handle /balance command - Show work-life balance report
+ */
+/**
+ * Handle /balance command - Show work-life balance report
+ */
+async function handleBalanceCommand(userId) {
+  console.log('📊 Balance command called for user:', userId);
+  
+  const userTokens = userManager.getUserTokens(userId);
+  
+  if (!userTokens) {
+    console.log('❌ User not connected');
+    return {
+      text: "🔗 Please connect your Google Calendar first!"
+    };
+  }
+
+  try {
+    console.log('✅ User tokens found, fetching events...');
+    
+    // Get events from last 7 days
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 7);
+    
+    const endDate = new Date();
+    
+    console.log('📅 Date range:', startDate.toISOString(), 'to', endDate.toISOString());
+    
+    const { google } = require('googleapis');
+    const oauth2Client = googleCalendar.getOAuthClient();
+    oauth2Client.setCredentials(userTokens);
+    
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    
+    console.log('🔄 Calling Google Calendar API...');
+    
+    const response = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: startDate.toISOString(),
+      timeMax: endDate.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+    });
+
+    const events = response.data.items || [];
+    
+    console.log(`✅ Retrieved ${events.length} events`);
+    
+    // Analyze work-life balance
+    console.log('🧠 Analyzing work-life balance...');
+    
+    const analysis = await workLifeBalanceAI.analyzeWorkLifeBalance(events, {
+      workStart: '09:00',
+      workEnd: '18:00',
+      targetSleepHours: 7
+    });
+
+    console.log('📊 Analysis complete:', analysis);
+
+    // Build response text
+    const score = analysis.workLifeScore;
+    const emoji = score >= 80 ? '🟢' : score >= 60 ? '🟡' : '🔴';
+
+    const responseText = `${emoji} **Work-Life Balance Report**\n\n` +
+          `📊 Score: ${score}/100\n\n` +
+          `**This Week:**\n` +
+          `⏱️ Work Hours: ${Math.round(analysis.workHours)} hours\n` +
+          `📅 Meetings: ${analysis.meetingsCount}\n` +
+          `🧠 Focus Time: ${Math.round(analysis.focusTimeHours)} hours\n` +
+          `😴 Avg Sleep: ${analysis.avgSleepHours.toFixed(1)} hours\n\n` +
+          `**Issues Found:** ${analysis.issues.length}\n` +
+          (analysis.issues.length > 0 ? analysis.issues.map(i => `• ${i}`).join('\n') + '\n\n' : '') +
+          `**Recommendations:** ${analysis.recommendations.length}\n` +
+          (analysis.recommendations.length > 0 ? analysis.recommendations.map(r => `• ${r}`).join('\n') : '');
+    
+    console.log('✅ Built response, returning now');
+    
+    // CRITICAL: Return the response object
+    const finalResponse = { text: responseText };
+    console.log('✅ Final response object:', finalResponse);
+    
+    return finalResponse;  // ← MAKE SURE THIS IS HERE!
+
+  } catch (error) {
+    console.error('❌ Error analyzing balance:', error);
+    console.error('Stack trace:', error.stack);
+    return {
+      text: `❌ Could not analyze work-life balance: ${error.message}`
+    };
+  }
+}
+
+
+
+
 module.exports = {
   handleTodayCommand,
   handleWeekCommand,
   handleDeleteCommand,
-  handleUpdateCommand
+  handleUpdateCommand,
+  handleBalanceCommand
 };
 
 
