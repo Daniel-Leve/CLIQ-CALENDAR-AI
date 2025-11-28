@@ -25,7 +25,7 @@ const limiter = rateLimit({
 app.use('/bot', limiter);
 app.use('/command', limiter);
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 
 // SECURITY: Request Verification
