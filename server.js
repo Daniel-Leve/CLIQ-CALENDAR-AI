@@ -208,24 +208,170 @@ app.get('/oauth/callback', async (req, res) => {
 
 // Bot message handler (with verification)
 // Bot message handler (with AI integration)
-// Bot message handler (with AI + Google Calendar integration)
-
-
+// This is the one that could'nt handle hi or something like that
 app.post('/bot', verifyCliqRequest, async (req, res) => {
   try {
     console.log('📨 Bot message received');
     
     // Extract user info - USE REAL USER ID FROM CLIQ
     const userMessage = sanitizeInput(req.body.text || '');
-    const userId = req.body.user?.id || 'unknown';  // Real Cliq user ID
+    const userId = req.body.user?.id || req.body.userId || 'unknown';  // Real Cliq user ID
     const userName = sanitizeInput(req.body.user?.name || 'User');
     
     console.log(`👤 User: ${userId} (${userName}) | Message: ${userMessage.substring(0, 50)}...`);
     
     // Validate input
-    if (!userMessage || userMessage.length < 3) {
+    // if (!userMessage || userMessage.length < 3) {
+    //   return res.json({
+    //     text: '⚠️ Please provide a message. Example: "Schedule meeting tomorrow at 3 PM"'
+    //   });
+    // }
+
+        // ========================================
+    // 🛡️ PRE-FILTER: Detect Intent FIRST
+    // ========================================
+    
+    const lowerMessage = userMessage.toLowerCase();
+    
+    // 1. Handle greetings
+    if (['hi', 'hello', 'hey', 'hola', 'good morning', 'good afternoon', 'good evening'].some(greeting => lowerMessage.includes(greeting))) {
       return res.json({
-        text: '⚠️ Please provide a message. Example: "Schedule meeting tomorrow at 3 PM"'
+        text: `👋 Hey ${userName}! I'm your AI calendar assistant.\n\n` +
+              `I can help you:\n` +
+              `• Schedule meetings and tasks\n` +
+              `• Plan your day with /suggestplan\n` +
+              `• Check work-life balance with /balance\n\n` +
+              `Try: "Schedule meeting tomorrow at 3 PM"`
+      });
+    }
+    
+    // 2. Handle thanks/appreciation
+    if (['thank', 'thanks', 'appreciate'].some(word => lowerMessage.includes(word))) {
+      return res.json({
+        text: `😊 You're welcome! Let me know if you need help scheduling anything else.`
+      });
+    }
+    
+    // 3. Handle casual conversation (not scheduling)
+    const casualPhrases = [
+  'weather', 'how are you', 'whats up', "what's up",
+  'tell me', 'joke', 'story', 'fact', 'news',
+  'today is', 'yesterday', 'nice day', 'beautiful',
+
+  // --- Added casual phrases ---
+  'good evening', 'good afternoon', 'how is it going',
+  'how are things', 'how you doing', 'how have you been',
+  'what are you doing', 'wyd', "what're you doing",
+  'what is new', 'anything new', 'how was your day',
+  'how’s your day', 'how’s everything',
+  'talk to me', 'chat with me', 'say something',
+
+  'i am bored', 'im bored', 'tell me something',
+  'entertain me', 'fun', 'interesting',
+  'give me a fact', 'give me a joke', 'make me laugh',
+
+  'good vibes', 'nice weather', 'feels good',
+  'feeling great', 'feeling sad', 'feeling tired',
+  'i’m tired', 'i’m happy', 'i’m sad',
+
+  'long time', 'miss you', 'what a day',
+  'ugh', 'wow', 'amazing', 'awesome',
+  'cool', 'nice', 'really', 'seriously',
+
+  'random thought', 'random talk', 'chatting',
+  'boredom', 'tell me more', 'say a story',
+  'tell me news', 'give me updates', 'small talk'
+];
+
+    
+    if (casualPhrases.some(phrase => lowerMessage.includes(phrase))) {
+      return res.json({
+        text: `💬 I'm a calendar assistant, so I focus on scheduling and planning.\n\n` +
+              `If you want to schedule something, try:\n` +
+              `• "Schedule meeting tomorrow at 3 PM"\n` +
+              `• "Block 2 hours Friday for project work"\n` +
+              `• "/suggestplan" to optimize your day`
+      });
+    }
+    
+    // 4. Check for scheduling keywords
+    const schedulingKeywords = [
+  // Core scheduling actions
+  'schedule', 'meeting', 'appointment', 'book', 'reserve',
+  'plan', 'block', 'set up', 'arrange', 'organize', 'fix',
+  'manage', 'reschedule', 'postpone', 'cancel', 'rebook',
+  'slot', 'time slot', 'availability', 'available', 'free', 'busy',
+
+  // Reminders & deadlines
+  'remind', 'reminder', 'deadline', 'due', 'due date',
+  'follow up', 'follow-up', 'alert', 'notify', 'notification',
+
+  // Days of the week
+  'today', 'tomorrow', 'day after tomorrow',
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+  'saturday', 'sunday',
+
+  // General time references
+  'this week', 'next week', 'last week',
+  'this month', 'next month', 'last month',
+  'evening', 'morning', 'afternoon', 'night',
+  'midnight', 'noon', 'weekend', 'weekday',
+
+  // Time formats & expressions
+  'at', 'pm', 'am', 'oclock', "o'clock", 'hrs', 'hour', 'hours',
+  'minute', 'minutes', 'sec', 'second', 'seconds',
+
+  // Natural language time
+  'later', 'soon', 'shortly', 'in a bit',
+  'in an hour', 'in two hours', 'in three hours',
+  'after', 'before',
+
+  // Date references
+  'on', 'date', 'calendar', 'day', 'month', 'year',
+  'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul',
+  'aug', 'sep', 'oct', 'nov', 'dec',
+
+  // Common scheduling verbs/phrases
+  'set a reminder', 'create event', 'add to calendar',
+  'mark', 'log', 'schedule for', 'put on calendar',
+  'fix up', 'line up', 'pencil in', 'confirm',
+
+  // Business/meeting specific
+  'call', 'zoom', 'meet', 'meetup', 'sync', 'standup',
+  'discussion', 'review', 'check-in', 'catch up',
+  'conference', 'session',
+
+  // Duration indicators
+  'for 10 minutes', 'for 30 minutes', 'for 1 hour', 'for 2 hours',
+  'from', 'to', 'between', 'until', 'till', 'through',
+
+  // Frequency / recurrence
+  'every day', 'daily', 'weekly', 'biweekly', 'monthly',
+  'every monday', 'every tuesday', 'every week', 'every month',
+  'repeat', 'recurring', 'recurrence',
+
+  // Time qualifiers
+  'early', 'late', 'first thing', 'end of day',
+  'start of day', 'midday',
+
+  // Contextual scheduling intents
+  'when can we', 'can we meet', 'let’s meet',
+  'set timing', 'pick a time', 'choose a time',
+  'push it', 'move it', 'shift it'
+];
+
+    
+    const hasSchedulingKeyword = schedulingKeywords.some(keyword => 
+      lowerMessage.includes(keyword)
+    );
+    
+    if (!hasSchedulingKeyword) {
+      return res.json({
+        text: `🤔 I don't think that's a scheduling request.\n\n` +
+              `I can help you schedule tasks and meetings. Try:\n` +
+              `• "Schedule team meeting tomorrow at 2 PM"\n` +
+              `• "Block 1 hour Friday for code review"\n` +
+              `• Type **/help** to see all commands`
       });
     }
 
@@ -268,6 +414,27 @@ app.post('/bot', verifyCliqRequest, async (req, res) => {
     }
     
     const event = aiResult.event;
+
+      // If AI didn't give a time, or time is null/empty → find a free slot
+    if (!event.time || event.time.trim() === '') {
+            console.log('⏰ No time provided, finding free slot...');
+            const userContext = {
+                timezone: 'Asia/Kolkata',
+                workHours: '09:00-18:00'
+            };
+        const freeSlot = await findFreeSlotForEvent(userTokens, event.date, event.duration || 1, userContext);
+        if (!freeSlot.success) {
+            return res.json({
+            text: `⚠️ I couldn't find a free time on ${formatDate(event.date)}.\n\n` +
+                    `You can try:\n` +
+                    `• Choosing another day\n` +
+                    `• Giving a specific time, like "at 4 PM".`
+        });
+    }
+        // Set the found time into event
+        event.time = freeSlot.startTime;   // e.g. "15:00"
+        console.log('✅ Free slot found at', event.time);
+}
     
     // ========================================
     // 📅 CHECK CALENDAR AVAILABILITY
@@ -296,19 +463,16 @@ app.post('/bot', verifyCliqRequest, async (req, res) => {
     // ========================================
     
     if (!availabilityCheck.available) {
-      return res.json({
-        text: `⚠️ **Time Slot Conflict!**\n\n` +
-              `You already have something scheduled at ${event.time} on ${formatDate(event.date)}.\n\n` +
-              `Busy slots:\n` +
-              availabilityCheck.busySlots.map(slot => 
-                `• ${new Date(slot.start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ` +
-                `${new Date(slot.end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
-              ).join('\n') +
-              `\n\nWould you like to:\n` +
-              `1. Choose a different time\n` +
-              `2. Override and schedule anyway`
-      });
-    }
+  return res.json({
+    text: `⚠️ **Time Slot Conflict!**\n\n` +
+          `You already have something scheduled at ${event.time} on ${formatDate(event.date)}.\n\n` +
+          `Busy slots:\n` +
+          availabilityCheck.busySlots.map(slot => 
+            `• ${new Date(slot.start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ` +
+            `${new Date(slot.end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+          ).join('\n')
+  });
+}
     
     // ========================================
     // ✅ CREATE CALENDAR EVENT
@@ -340,17 +504,54 @@ app.post('/bot', verifyCliqRequest, async (req, res) => {
 });
 
 
-// Helper function to calculate end time
+
+
+
+// function calculateEndTime(startTime, durationHours) {
+//   const [hours, minutes] = startTime.split(':').map(Number);
+
+//   let endHours = hours + Math.floor(durationHours);
+//   let endMinutes = minutes + ((durationHours % 1) * 60);
+
+//   if (endMinutes >= 60) {
+//     endHours += Math.floor(endMinutes / 60);
+//     endMinutes = endMinutes % 60;
+//   }
+
+//   // If we go past or reach 24:00, wrap to 00:00
+//   if (endHours >= 24) {
+//     endHours = 0;
+//     endMinutes = 0;
+//   }
+
+//   return `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+// }
+
+
+
+// Helper function to format dates nicely
+
 function calculateEndTime(startTime, durationHours) {
   const [hours, minutes] = startTime.split(':').map(Number);
-  const endHours = hours + Math.floor(durationHours);
-  const endMinutes = minutes + ((durationHours % 1) * 60);
-  
+
+  let endHours = hours + Math.floor(durationHours);
+  let endMinutes = minutes + ((durationHours % 1) * 60);
+
+  if (endMinutes >= 60) {
+    endHours += Math.floor(endMinutes / 60);
+    endMinutes = endMinutes % 60;
+  }
+
+  // If end time would go past 23:59, cap it at 23:59
+  if (endHours > 23 || (endHours === 23 && endMinutes > 59)) {
+    endHours = 23;
+    endMinutes = 59;
+  }
+
   return `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
 }
 
 
-// Helper function to format dates nicely
 function formatDate(dateString) {
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', { 
@@ -696,46 +897,6 @@ function generateInsights(currentTasks, optimizedPlan) {
   return insights.join('\n\n');
 }
 
-// Update event endpoint
-// app.post('/calendar/update', verifyCliqRequest, async (req, res) => {
-//   try {
-//     const { userId, eventId, summary, date, startTime, endTime } = req.body;
-    
-//     console.log(`📝 Update request: Event ${eventId} by user ${userId}`);
-    
-//     const userTokens = userManager.getUserTokens(userId);
-//     if (!userTokens) {
-//       return res.json({ success: false, error: 'Not authenticated' });
-//     }
-    
-//     const { google } = require('googleapis');
-//     const oauth2Client = googleCalendar.getOAuthClient();
-//     oauth2Client.setCredentials(userTokens);
-    
-//     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    
-//     // Build ISO datetime strings
-//     const startDateTime = `${date}T${startTime}:00+05:30`;
-//     const endDateTime = `${date}T${endTime}:00+05:30`;
-    
-//     await calendar.events.update({
-//       calendarId: 'primary',
-//       eventId: eventId,
-//       resource: {
-//         summary: summary,
-//         start: { dateTime: startDateTime, timeZone: 'Asia/Kolkata' },
-//         end: { dateTime: endDateTime, timeZone: 'Asia/Kolkata' }
-//       }
-//     });
-    
-//     console.log('✅ Event updated successfully');
-//     res.json({ success: true, message: 'Task updated' });
-    
-//   } catch (error) {
-//     console.error('❌ Update error:', error.message);
-//     res.json({ success: false, error: error.message });
-//   }
-// });
 
 // Update existing event
 app.post('/calendar/update', verifyCliqRequest, async (req, res) => {
@@ -803,37 +964,6 @@ app.post('/calendar/update', verifyCliqRequest, async (req, res) => {
 });
 
 
-// Delete event endpoint
-// app.post('/calendar/delete', verifyCliqRequest, async (req, res) => {
-//   try {
-//     const { userId, eventId } = req.body;
-    
-//     console.log(`🗑️ Delete request: Event ${eventId} by user ${userId}`);
-    
-//     const userTokens = userManager.getUserTokens(userId);
-//     if (!userTokens) {
-//       return res.json({ success: false, error: 'Not authenticated' });
-//     }
-    
-//     const { google } = require('googleapis');
-//     const oauth2Client = googleCalendar.getOAuthClient();
-//     oauth2Client.setCredentials(userTokens);
-    
-//     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    
-//     await calendar.events.delete({
-//       calendarId: 'primary',
-//       eventId: eventId
-//     });
-    
-//     console.log('✅ Event deleted successfully');
-//     res.json({ success: true, message: 'Task deleted' });
-    
-//   } catch (error) {
-//     console.error('❌ Delete error:', error.message);
-//     res.json({ success: false, error: error.message });
-//   }
-// });
 
 // Delete event
 app.post('/calendar/delete', verifyCliqRequest, async (req, res) => {
@@ -869,74 +999,6 @@ app.post('/calendar/delete', verifyCliqRequest, async (req, res) => {
     res.json({ success: false, error: error.message });
   }
 });
-
-
-
-// app.post('/widget/today', verifyCliqRequest, async (req, res) => {
-//   try {
-//     const userId = req.body.userId || 'unknown';
-//     const tabId = req.body.tabId || 'overview';
-//     const eventType = req.body.eventType || 'load';
-    
-//     console.log(`📊 Widget ${eventType} from user: ${userId} | Tab: ${tabId}`);
-    
-//     if (userId === 'unknown') {
-//       return res.json(buildErrorWidget('Could not identify user'));
-//     }
-
-//     const userTokens = userManager.getUserTokens(userId);
-    
-//     if (!userTokens) {
-//       console.log('❌ No tokens found');
-//       return res.json(buildErrorWidget('Please connect your Google Calendar first using /connect command'));
-//     }
-
-//     // Fetch today's events
-//     const today = new Date();
-//     const todayStr = today.toISOString().split('T')[0];
-    
-//     const { google } = require('googleapis');
-//     const oauth2Client = googleCalendar.getOAuthClient();
-//     oauth2Client.setCredentials(userTokens);
-    
-//     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    
-//     const response = await calendar.events.list({
-//       calendarId: 'primary',
-//       timeMin: `${todayStr}T00:00:00+05:30`,
-//       timeMax: `${todayStr}T23:59:59+05:30`,
-//       singleEvents: true,
-//       orderBy: 'startTime',
-//     });
-
-//     const events = response.data.items || [];
-    
-//     console.log(`✅ Found ${events.length} events for widget`);
-
-//     // Build widget response
-//     const widgetData = buildTodayWidget(events, today, tabId);
-    
-//     console.log('📤 Widget structure:', JSON.stringify({
-//       type: widgetData.type,
-//       tabCount: widgetData.tabs?.length || 0,
-//       activeTab: widgetData.active_tab,
-//       sections: widgetData.tabs?.map(t => ({
-//         id: t.id,
-//         sectionCount: t.id === tabId ? widgetData.sections?.length || 0 : 0
-//       }))
-//     }, null, 2));
-    
-//     res.json(widgetData);
-
-//   } catch (error) {
-//     console.error('❌ Widget error:', error.message);
-    
-//     if (!res.headersSent) {
-//       res.json(buildErrorWidget('Error loading calendar data: ' + error.message));
-//     }
-//   }
-// });
-
 
 app.post('/widget/today', verifyCliqRequest, async (req, res) => {
   try {
@@ -998,66 +1060,6 @@ app.post('/widget/today', verifyCliqRequest, async (req, res) => {
   }
 });
 
-
-/**
- * Build Today's Tasks Widget - CORRECTED VERSION
- * Following Zoho Cliq widget documentation structure
- */
-// function buildTodayWidget(events, currentDate, activeTabId = 'overview') {
-//   console.log('🔨 Building widget for', events.length, 'events');
-  
-//   const now = new Date();
-//   const currentTime = now.getTime();
-  
-//   // Categorize events
-//   const upcoming = [];
-//   const inProgress = [];
-//   const completed = [];
-  
-//   events.forEach(event => {
-//     const start = new Date(event.start.dateTime || event.start.date);
-//     const end = new Date(event.end.dateTime || event.end.date);
-    
-//     if (end.getTime() < currentTime) {
-//       completed.push(event);
-//     } else if (start.getTime() <= currentTime && end.getTime() >= currentTime) {
-//       inProgress.push(event);
-//     } else {
-//       upcoming.push(event);
-//     }
-//   });
-  
-//   // ========================================
-//   // BUILD WIDGET STRUCTURE
-//   // ========================================
-//   const widget = {
-//     type: "applet",
-//     tabs: [
-//       { label: "Overview", id: "overview" },
-//       { label: "All Tasks", id: "all_tasks" }
-//     ],
-//     active_tab: activeTabId,
-//     sections: [], // Will be populated based on active tab
-//     header: {
-//       title: `📅 Today - ${currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-//       navigation: "new"
-//     }
-//   };
-  
-//   // ========================================
-//   // BUILD SECTIONS BASED ON ACTIVE TAB
-//   // ========================================
-  
-//   if (activeTabId === 'overview') {
-//     widget.sections = buildOverviewSections(events, completed, inProgress, upcoming, currentTime);
-//   } else if (activeTabId === 'all_tasks') {
-//     widget.sections = buildAllTasksSections(events, currentTime);
-//   }
-  
-//   console.log(`✅ Widget built: ${widget.sections.length} sections for tab '${activeTabId}'`);
-  
-//   return widget;
-// }
 
 
 function buildTodayWidget(events, currentDate, userId) {
@@ -1225,173 +1227,6 @@ function buildTodayWidget(events, currentDate, userId) {
 }
 
 
-/**
- * Build Overview Tab Sections
- */
-// function buildOverviewSections(events, completed, inProgress, upcoming, currentTime) {
-//   const sections = [];
-  
-//   // ========================================
-//   // SECTION 1: STATS
-//   // ========================================
-//   const statsElements = [];
-  
-//   statsElements.push({
-//     type: "title",
-//     text: "📊 Today's Summary"
-//   });
-  
-//   statsElements.push({
-//     type: "text",
-//     text: `✅ Completed: **${completed.length}**  \n` +
-//           `🔵 In Progress: **${inProgress.length}**  \n` +
-//           `⏳ Upcoming: **${upcoming.length}**  \n` +
-//           `📊 Total Tasks: **${events.length}**`
-//   });
-  
-//   statsElements.push({ type: "divider" });
-  
-//   sections.push({
-//     id: 1,
-//     elements: statsElements
-//   });
-  
-//   // ========================================
-//   // SECTION 2: CURRENT TASK (if exists)
-//   // ========================================
-//   if (inProgress.length > 0) {
-//     const currentElements = [];
-//     const currentEvent = inProgress[0];
-//     const start = new Date(currentEvent.start.dateTime || currentEvent.start.date);
-//     const end = new Date(currentEvent.end.dateTime || currentEvent.end.date);
-    
-//     currentElements.push({
-//       type: "title",
-//       text: "🔵 Currently Working On"
-//     });
-    
-//     currentElements.push({
-//       type: "text",
-//       text: `**${currentEvent.summary}**  \n` +
-//             `⏰ ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ` +
-//             `${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
-//     });
-    
-//     currentElements.push({ type: "divider" });
-    
-//     sections.push({
-//       id: 2,
-//       elements: currentElements
-//     });
-//   }
-  
-//   // ========================================
-//   // SECTION 3: NEXT TASK (if exists)
-//   // ========================================
-//   if (upcoming.length > 0) {
-//     const nextElements = [];
-//     const nextEvent = upcoming[0];
-//     const start = new Date(nextEvent.start.dateTime || nextEvent.start.date);
-//     const minutesUntil = Math.round((start.getTime() - currentTime) / 60000);
-    
-//     nextElements.push({
-//       type: "title",
-//       text: "⏳ Up Next"
-//     });
-    
-//     nextElements.push({
-//       type: "text",
-//       text: `**${nextEvent.summary}**  \n` +
-//             `⏰ ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} ` +
-//             `(in ${minutesUntil} minutes)`
-//     });
-    
-//     nextElements.push({ type: "divider" });
-    
-//     sections.push({
-//       id: 3,
-//       elements: nextElements
-//     });
-//   }
-  
-//   // ========================================
-//   // SECTION 4: EMPTY STATE (if no tasks)
-//   // ========================================
-//   if (events.length === 0) {
-//     const emptyElements = [];
-    
-//     emptyElements.push({
-//       type: "text",
-//       text: "📭 **No tasks scheduled for today!**  \n\nEnjoy your free time! 🎉"
-//     });
-    
-//     sections.push({
-//       id: 4,
-//       elements: emptyElements
-//     });
-//   }
-  
-//   return sections;
-// }
-
-/**
- * Build All Tasks Tab Sections
- */
-// function buildAllTasksSections(events, currentTime) {
-//   const sections = [];
-  
-//   if (events.length === 0) {
-//     // Empty state
-//     sections.push({
-//       id: 1,
-//       elements: [{
-//         type: "text",
-//         text: "📭 **No tasks scheduled for today!**  \n\nEnjoy your free time! 🎉"
-//       }]
-//     });
-    
-//     return sections;
-//   }
-  
-//   // Add each event as a separate section
-//   events.forEach((event, idx) => {
-//     const start = new Date(event.start.dateTime || event.start.date);
-//     const end = new Date(event.end.dateTime || event.end.date);
-//     const duration = Math.round((end - start) / (1000 * 60 * 60) * 10) / 10;
-    
-//     // Determine status
-//     let status = '⏳';
-//     let statusText = 'Upcoming';
-//     if (end.getTime() < currentTime) {
-//       status = '✅';
-//       statusText = 'Completed';
-//     } else if (start.getTime() <= currentTime) {
-//       status = '🔵';
-//       statusText = 'In Progress';
-//     }
-    
-//     const elements = [];
-    
-//     // Use activity element for better visual presentation
-//     elements.push({
-//       type: "activity",
-//       title: `${status} ${event.summary}`,
-//       description: `⏰ ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })} - ` +
-//                    `${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })} ` +
-//                    `(${duration}h) • ${statusText}`
-//     });
-    
-//     elements.push({ type: "divider" });
-    
-//     sections.push({
-//       id: idx + 1,
-//       elements: elements
-//     });
-//   });
-  
-//   return sections;
-// }
-
 
 function buildErrorWidget(errorMessage) {
   return {
@@ -1435,6 +1270,76 @@ app.post('/widget/start-edit', verifyCliqRequest, async (req, res) => {
 });
 
 
+async function findFreeSlotForEvent(userTokens, date, durationHours, userContext) {
+  try {
+    const workStart = userContext.workHours?.split('-')[0] || '09:00';
+    const workEnd = userContext.workHours?.split('-')[1] || '18:00';
+
+    const [startHour] = workStart.split(':').map(Number);
+    const [endHour] = workEnd.split(':').map(Number);
+
+    const { google } = require('googleapis');
+    const oauth2Client = googleCalendar.getOAuthClient();
+    oauth2Client.setCredentials(userTokens);
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+    const timeMin = `${date}T${workStart}:00+05:30`;
+    const timeMax = `${date}T${workEnd}:00+05:30`;
+
+    const response = await calendar.freebusy.query({
+      requestBody: {
+        timeMin,
+        timeMax,
+        items: [{ id: 'primary' }]
+      }
+    });
+
+    const busySlots = response.data.calendars.primary.busy || [];
+
+    // Build a list of candidate start times in 30 min steps
+    const candidates = [];
+    for (let hour = startHour; hour <= endHour - durationHours; hour++) {
+      candidates.push(`${String(hour).padStart(2,'0')}:00`);
+      candidates.push(`${String(hour).padStart(2,'0')}:30`);
+    }
+
+    // Check each candidate against busy slots
+    for (const candidate of candidates) {
+      const candidateStart = new Date(`${date}T${candidate}:00+05:30`);
+      const candidateEnd = new Date(candidateStart.getTime() + durationHours * 60 * 60 * 1000);
+
+      const overlaps = busySlots.some(slot => {
+        const busyStart = new Date(slot.start);
+        const busyEnd = new Date(slot.end);
+        return candidateStart < busyEnd && candidateEnd > busyStart;
+      });
+
+      if (!overlaps) {
+        // Found free time
+        return {
+          success: true,
+          startTime: candidate
+        };
+      }
+    }
+
+    // No free slots
+    return {
+      success: false,
+      error: 'No free slot found'
+    };
+
+  } catch (error) {
+    console.error('❌ Error in findFreeSlotForEvent:', error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+
+
 
 app.use((req, res) => {
   console.warn(`404: ${req.method} ${req.path}`);
@@ -1457,3 +1362,258 @@ app.listen(PORT, () => {
   console.log(`\n Make sure to set CLIQ_APP_KEY in .env file\n`);
 });
 
+
+
+
+// app.post('/bot', verifyCliqRequest, async (req, res) => {
+//   try {
+//     console.log('📨 Bot message received');
+    
+//     const userMessage = sanitizeInput(req.body.text || '');
+//     const userId = req.body.user?.id || 'unknown';
+//     const userName = sanitizeInput(req.body.user?.name || 'User');
+    
+//     console.log(`👤 User: ${userId} (${userName}) | Message: ${userMessage.substring(0, 50)}...`);
+    
+//     // Validate input
+//     if (!userMessage || userMessage.length < 2) {
+//       return res.json({
+//         text: '⚠️ Please type a message.'
+//       });
+//     }
+
+//     // ========================================
+//     // 🛡️ PRE-FILTER: Detect Intent FIRST
+//     // ========================================
+    
+//     const lowerMessage = userMessage.toLowerCase();
+    
+//     // 1. Handle greetings
+//     if (['hi', 'hello', 'hey', 'hola', 'good morning', 'good afternoon', 'good evening'].some(greeting => lowerMessage.includes(greeting))) {
+//       return res.json({
+//         text: `👋 Hey ${userName}! I'm your AI calendar assistant.\n\n` +
+//               `I can help you:\n` +
+//               `• Schedule meetings and tasks\n` +
+//               `• Plan your day with /suggestplan\n` +
+//               `• Check work-life balance with /balance\n\n` +
+//               `Try: "Schedule meeting tomorrow at 3 PM"`
+//       });
+//     }
+    
+//     // 2. Handle thanks/appreciation
+//     if (['thank', 'thanks', 'appreciate'].some(word => lowerMessage.includes(word))) {
+//       return res.json({
+//         text: `😊 You're welcome! Let me know if you need help scheduling anything else.`
+//       });
+//     }
+    
+//     // 3. Handle casual conversation (not scheduling)
+//     const casualPhrases = [
+//   'weather', 'how are you', 'whats up', "what's up",
+//   'tell me', 'joke', 'story', 'fact', 'news',
+//   'today is', 'yesterday', 'nice day', 'beautiful',
+
+//   // --- Added casual phrases ---
+//   'hello', 'hi', 'hey', 'good morning', 'good night',
+//   'good evening', 'good afternoon', 'how is it going',
+//   'how are things', 'how you doing', 'how have you been',
+//   'what are you doing', 'wyd', "what're you doing",
+//   'what is new', 'anything new', 'how was your day',
+//   'how’s your day', 'how’s everything',
+//   'talk to me', 'chat with me', 'say something',
+
+//   'i am bored', 'im bored', 'tell me something',
+//   'entertain me', 'fun', 'interesting',
+//   'give me a fact', 'give me a joke', 'make me laugh',
+
+//   'good vibes', 'nice weather', 'feels good',
+//   'feeling great', 'feeling sad', 'feeling tired',
+//   'i’m tired', 'i’m happy', 'i’m sad',
+
+//   'long time', 'miss you', 'what a day',
+//   'ugh', 'wow', 'amazing', 'awesome',
+//   'cool', 'nice', 'really', 'seriously',
+
+//   'random thought', 'random talk', 'chatting',
+//   'boredom', 'tell me more', 'say a story',
+//   'tell me news', 'give me updates', 'small talk'
+// ];
+
+    
+//     if (casualPhrases.some(phrase => lowerMessage.includes(phrase))) {
+//       return res.json({
+//         text: `💬 I'm a calendar assistant, so I focus on scheduling and planning.\n\n` +
+//               `If you want to schedule something, try:\n` +
+//               `• "Schedule meeting tomorrow at 3 PM"\n` +
+//               `• "Block 2 hours Friday for project work"\n` +
+//               `• "/suggestplan" to optimize your day`
+//       });
+//     }
+    
+//     // 4. Check for scheduling keywords
+//     const schedulingKeywords = [
+//   // Core scheduling actions
+//   'schedule', 'meeting', 'appointment', 'book', 'reserve',
+//   'plan', 'block', 'set up', 'arrange', 'organize', 'fix',
+//   'manage', 'reschedule', 'postpone', 'cancel', 'rebook',
+//   'slot', 'time slot', 'availability', 'available', 'free', 'busy',
+
+//   // Reminders & deadlines
+//   'remind', 'reminder', 'deadline', 'due', 'due date',
+//   'follow up', 'follow-up', 'alert', 'notify', 'notification',
+
+//   // Days of the week
+//   'today', 'tomorrow', 'day after tomorrow',
+//   'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+//   'saturday', 'sunday',
+
+//   // General time references
+//   'this week', 'next week', 'last week',
+//   'this month', 'next month', 'last month',
+//   'evening', 'morning', 'afternoon', 'night',
+//   'midnight', 'noon', 'weekend', 'weekday',
+
+//   // Time formats & expressions
+//   'at', 'pm', 'am', 'oclock', "o'clock", 'hrs', 'hour', 'hours',
+//   'minute', 'minutes', 'sec', 'second', 'seconds',
+
+//   // Natural language time
+//   'later', 'soon', 'shortly', 'in a bit',
+//   'in an hour', 'in two hours', 'in three hours',
+//   'after', 'before',
+
+//   // Date references
+//   'on', 'date', 'calendar', 'day', 'month', 'year',
+//   'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul',
+//   'aug', 'sep', 'oct', 'nov', 'dec',
+
+//   // Common scheduling verbs/phrases
+//   'set a reminder', 'create event', 'add to calendar',
+//   'mark', 'log', 'schedule for', 'put on calendar',
+//   'fix up', 'line up', 'pencil in', 'confirm',
+
+//   // Business/meeting specific
+//   'call', 'zoom', 'meet', 'meetup', 'sync', 'standup',
+//   'discussion', 'review', 'check-in', 'catch up',
+//   'conference', 'session',
+
+//   // Duration indicators
+//   'for 10 minutes', 'for 30 minutes', 'for 1 hour', 'for 2 hours',
+//   'from', 'to', 'between', 'until', 'till', 'through',
+
+//   // Frequency / recurrence
+//   'every day', 'daily', 'weekly', 'biweekly', 'monthly',
+//   'every monday', 'every tuesday', 'every week', 'every month',
+//   'repeat', 'recurring', 'recurrence',
+
+//   // Time qualifiers
+//   'early', 'late', 'first thing', 'end of day',
+//   'start of day', 'midday',
+
+//   // Contextual scheduling intents
+//   'when can we', 'can we meet', 'let’s meet',
+//   'set timing', 'pick a time', 'choose a time',
+//   'push it', 'move it', 'shift it'
+// ];
+
+    
+//     const hasSchedulingKeyword = schedulingKeywords.some(keyword => 
+//       lowerMessage.includes(keyword)
+//     );
+    
+//     if (!hasSchedulingKeyword) {
+//       return res.json({
+//         text: `🤔 I don't think that's a scheduling request.\n\n` +
+//               `I can help you schedule tasks and meetings. Try:\n` +
+//               `• "Schedule team meeting tomorrow at 2 PM"\n` +
+//               `• "Block 1 hour Friday for code review"\n` +
+//               `• Type **/help** to see all commands`
+//       });
+//     }
+
+//     // ========================================
+//     // ✅ PASSED FILTER - Now check calendar connection
+//     // ========================================
+    
+//     const userTokens = userManager.getUserTokens(userId);
+    
+//     if (!userTokens) {
+//       console.log('❌ User not connected to calendar');
+//       return res.json({
+//         text: `🔗 **Please connect your Google Calendar first!**\n\n` +
+//               `I need access to your calendar to:\n` +
+//               `• Check your availability\n` +
+//               `• Create events\n` +
+//               `• Send you daily briefings\n\n` +
+//               `Click the "Connect Now" button below to get started.`
+//       });
+//     }
+
+//     // ========================================
+//     // 🧠 AI PROCESSING WITH PERPLEXITY
+//     // ========================================
+    
+//     console.log('🤖 Processing with Perplexity AI...');
+    
+//     const userContext = {
+//       timezone: 'Asia/Kolkata',
+//       workHours: '09:00-18:00'
+//     };
+    
+//     const aiResult = await perplexityAgent.extractEventDetails(userMessage, userContext);
+    
+//     if (!aiResult.success) {
+//       return res.json({
+//         text: `❌ I couldn't extract event details from that.\n\n` +
+//               `Please try being more specific:\n` +
+//               `• "Schedule meeting with team tomorrow at 3 PM"\n` +
+//               `• "Block 2 hours Friday afternoon for project work"\n` +
+//               `• "Remind me to submit report by next Monday 5 PM"`
+//       });
+//     }
+    
+//     const event = aiResult.event;
+
+//     // If AI didn't give a time, or time is null/empty → find a free slot
+//     if (!event.time || event.time.trim() === '') {
+//             console.log('⏰ No time provided, finding free slot...');
+//             const userContext = {
+//                 timezone: 'Asia/Kolkata',
+//                 workHours: '09:00-18:00'
+//             };
+//         const freeSlot = await findFreeSlotForEvent(userTokens, event.date, event.duration || 1, userContext);
+//         if (!freeSlot.success) {
+//             return res.json({
+//             text: `⚠️ I couldn't find a free time on ${formatDate(event.date)}.\n\n` +
+//                     `You can try:\n` +
+//                     `• Choosing another day\n` +
+//                     `• Giving a specific time, like "at 4 PM".`
+//         });
+//     }
+//         // Set the found time into event
+//         event.time = freeSlot.startTime;   // e.g. "15:00"
+//         console.log('✅ Free slot found at', event.time);
+// }
+    
+//     // ... rest of your existing code for availability check, event creation, etc.
+    
+//   } catch (error) {
+//     console.error('❌ Error in bot handler:', error);
+//     res.status(500).json({
+//       text: '⚠️ An error occurred. Please try again.'
+//     });
+//   }
+// });
+
+
+
+
+// Helper function to calculate end time
+
+// function calculateEndTime(startTime, durationHours) {
+//   const [hours, minutes] = startTime.split(':').map(Number);
+//   const endHours = hours + Math.floor(durationHours);
+//   const endMinutes = minutes + ((durationHours % 1) * 60);
+  
+//   return `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+// }

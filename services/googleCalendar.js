@@ -95,6 +95,43 @@ async function exchangeCodeForTokens(code) {
 /**
  * Check calendar availability using FreeBusy API
  */
+// async function checkAvailability(userTokens, date, startTime, endTime) {
+//   const oauth2Client = getOAuthClient();
+//   oauth2Client.setCredentials(userTokens);
+  
+//   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+  
+//   try {
+//     const timeMin = `${date}T${startTime}:00+05:30`; // IST timezone
+//     const timeMax = `${date}T${endTime}:00+05:30`;
+    
+//     const response = await calendar.freebusy.query({
+//       requestBody: {
+//         timeMin: timeMin,
+//         timeMax: timeMax,
+//         items: [{ id: 'primary' }]
+//       }
+//     });
+    
+//     const busySlots = response.data.calendars.primary.busy || [];
+    
+//     console.log('📅 Availability check:', busySlots.length === 0 ? 'FREE' : 'BUSY');
+    
+//     return {
+//       success: true,
+//       available: busySlots.length === 0,
+//       busySlots: busySlots
+//     };
+    
+//   } catch (error) {
+//     console.error('❌ Availability check error:', error);
+//     return {
+//       success: false,
+//       error: error.message
+//     };
+//   }
+// }
+
 async function checkAvailability(userTokens, date, startTime, endTime) {
   const oauth2Client = getOAuthClient();
   oauth2Client.setCredentials(userTokens);
@@ -102,13 +139,15 @@ async function checkAvailability(userTokens, date, startTime, endTime) {
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
   
   try {
-    const timeMin = `${date}T${startTime}:00+05:30`; // IST timezone
+    const timeMin = `${date}T${startTime}:00+05:30`;
     const timeMax = `${date}T${endTime}:00+05:30`;
-    
+
+    console.log('🕒 FreeBusy range:', timeMin, '→', timeMax);
+
     const response = await calendar.freebusy.query({
       requestBody: {
-        timeMin: timeMin,
-        timeMax: timeMax,
+        timeMin,
+        timeMax,
         items: [{ id: 'primary' }]
       }
     });
@@ -120,17 +159,74 @@ async function checkAvailability(userTokens, date, startTime, endTime) {
     return {
       success: true,
       available: busySlots.length === 0,
-      busySlots: busySlots
+      busySlots
     };
     
   } catch (error) {
-    console.error('❌ Availability check error:', error);
+    console.error('❌ Availability check error:', error.response?.data || error.message);
     return {
       success: false,
       error: error.message
     };
   }
 }
+
+
+
+// async function checkAvailability(userTokens, date, startTime, endTime) {
+//   const oauth2Client = getOAuthClient();
+//   oauth2Client.setCredentials(userTokens);
+  
+//   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+  
+//   try {
+//     // Start of range
+//     const timeMin = `${date}T${startTime}:00+05:30`; // IST
+    
+//     // End of range – handle midnight wrap
+//     let endDate = date;
+//     let endTimeForRange = endTime;
+    
+//     if (endTime === '00:00') {
+//       const d = new Date(`${date}T00:00:00+05:30`);
+//       d.setDate(d.getDate() + 1);
+//       endDate = d.toISOString().split('T')[0];
+//       console.log(endDate);
+//     }
+    
+//     const timeMax = `${endDate}T${endTimeForRange}:00+05:30`;
+    
+//     console.log('🕒 FreeBusy range:', timeMin, '→', timeMax);
+    
+//     const response = await calendar.freebusy.query({
+//       requestBody: {
+//         timeMin: timeMin,
+//         timeMax: timeMax,
+//         items: [{ id: 'primary' }]
+//       }
+//     });
+    
+//     const busySlots = response.data.calendars.primary.busy || [];
+    
+//     console.log('📅 Availability check:', busySlots.length === 0 ? 'FREE' : 'BUSY');
+    
+//     return {
+//       success: true,
+//       available: busySlots.length === 0,
+//       busySlots: busySlots
+//     };
+    
+//   } catch (error) {
+//     console.error('❌ Availability check error:', error.response?.data || error.message);
+//     return {
+//       success: false,
+//       error: error.message
+//     };
+//   }
+// }
+
+
+
 
 /**
  * Create event in Google Calendar
@@ -197,16 +293,133 @@ async function createCalendarEvent(userTokens, eventDetails) {
   }
 }
 
+
+// async function createCalendarEvent(userTokens, eventDetails) {
+//   const oauth2Client = getOAuthClient();
+//   oauth2Client.setCredentials(userTokens);
+
+//   const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+//   try {
+//     const startDate = eventDetails.date;          // e.g. "2025-11-28"
+//     const startTime = eventDetails.time;         // e.g. "23:00"
+
+//     const startDateTime = `${startDate}T${startTime}:00+05:30`;
+
+//     // Calculate end time (may return "00:00" if it crosses midnight)
+//     const endTime = calculateEndTime(startTime, eventDetails.duration);
+
+//     // Figure out end date (same day or next day)
+//     let endDate = startDate;
+//     if (endTime === '00:00') {
+//       const d = new Date(`${startDate}T00:00:00+05:30`);
+//       d.setDate(d.getDate() + 1);
+//       endDate = d.toISOString().split('T')[0];
+//     }
+
+//     const endDateTime = `${endDate}T${endTime}:00+05:30`;
+
+//     const event = {
+//       summary: eventDetails.title,
+//       description: eventDetails.description || '',
+//       start: {
+//         dateTime: startDateTime,
+//         timeZone: 'Asia/Kolkata'
+//       },
+//       end: {
+//         dateTime: endDateTime,
+//         timeZone: 'Asia/Kolkata'
+//       },
+//       reminders: {
+//         useDefault: false,
+//         overrides: [
+//           { method: 'popup', minutes: 30 },
+//           { method: 'popup', minutes: 10 }
+//         ]
+//       }
+//     };
+
+//     if (eventDetails.participants && eventDetails.participants.length > 0) {
+//       event.attendees = eventDetails.participants.map(email => ({ email }));
+//     }
+
+//     console.log('📤 Creating calendar event:', event.summary, startDateTime, '→', endDateTime);
+
+//     const response = await calendar.events.insert({
+//       calendarId: 'primary',
+//       requestBody: event,
+//       sendUpdates: 'all'
+//     });
+
+//     console.log('✅ Event created successfully!');
+
+//     return {
+//       success: true,
+//       event: response.data,
+//       eventLink: response.data.htmlLink
+//     };
+
+//   } catch (error) {
+//     console.error('❌ Event creation error:', error);
+//     return {
+//       success: false,
+//       error: error.message
+//     };
+//   }
+// }
+
+
 /**
  * Helper: Calculate end time based on start time and duration
  */
+// function calculateEndTime(startTime, durationHours) {
+//   const [hours, minutes] = startTime.split(':').map(Number);
+//   const endHours = hours + Math.floor(durationHours);
+//   const endMinutes = minutes + ((durationHours % 1) * 60);
+  
+//   return `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+// }
+
+// function calculateEndTime(startTime, durationHours) {
+//   const [hours, minutes] = startTime.split(':').map(Number);
+
+//   let endHours = hours + Math.floor(durationHours);
+//   let endMinutes = minutes + ((durationHours % 1) * 60);
+
+//   if (endMinutes >= 60) {
+//     endHours += Math.floor(endMinutes / 60);
+//     endMinutes = endMinutes % 60;
+//   }
+
+//   // If we go past or reach 24:00, wrap to 00:00
+//   if (endHours >= 24) {
+//     endHours = 0;
+//     endMinutes = 0;
+//   }
+
+//   return `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+// }
+
 function calculateEndTime(startTime, durationHours) {
   const [hours, minutes] = startTime.split(':').map(Number);
-  const endHours = hours + Math.floor(durationHours);
-  const endMinutes = minutes + ((durationHours % 1) * 60);
-  
+
+  let endHours = hours + Math.floor(durationHours);
+  let endMinutes = minutes + ((durationHours % 1) * 60);
+
+  if (endMinutes >= 60) {
+    endHours += Math.floor(endMinutes / 60);
+    endMinutes = endMinutes % 60;
+  }
+
+  // If end time would go past 23:59, cap it at 23:59
+  if (endHours > 23 || (endHours === 23 && endMinutes > 59)) {
+    endHours = 23;
+    endMinutes = 59;
+  }
+
   return `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
 }
+
 
 module.exports = {
   getOAuthClient,   
