@@ -1,6 +1,5 @@
 const axios = require('axios');
 require('dotenv').config();
-
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_API_URL = 'https://api.perplexity.ai/chat/completions';
 
@@ -51,22 +50,16 @@ Required format:
 
     const aiResponse = response.data.choices[0].message.content;
     console.log('🧠 AI Response (first 500 chars):', aiResponse.substring(0, 500));
-
-    // ✅ EXTRACT JSON FROM RESPONSE
     let plan;
     try {
       let cleaned = aiResponse.trim();
-      
-      // Method 1: Find JSON array using regex
       const jsonArrayMatch = cleaned.match(/\[\s*\{[\s\S]*\}\s*\]/);
       if (jsonArrayMatch) {
         cleaned = jsonArrayMatch[0];
         console.log('✅ Extracted JSON array using regex');
       } else {
-        // Method 2: Find by brackets
         const startIdx = cleaned.indexOf('[');
         const endIdx = cleaned.lastIndexOf(']');
-        
         if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
           cleaned = cleaned.substring(startIdx, endIdx + 1);
           console.log('✅ Extracted JSON using bracket search');
@@ -74,8 +67,6 @@ Required format:
           throw new Error('No JSON array found in response');
         }
       }
-      
-      // Remove any remaining markdown
       cleaned = cleaned.replace(/``````/g, '').trim();
       
       console.log('🔍 Cleaned JSON (first 200 chars):', cleaned.substring(0, 200));
@@ -92,8 +83,6 @@ Required format:
         rawResponse: aiResponse
       };
     }
-
-    // Validate plan
     if (!Array.isArray(plan) || plan.length === 0) {
       console.error('❌ Invalid structure - not an array or empty');
       return {
@@ -101,7 +90,6 @@ Required format:
         error: 'AI returned invalid plan structure'
       };
     }
-
     console.log(`✅ Plan generated: ${plan.length} tasks`);
 
     return {
@@ -109,7 +97,6 @@ Required format:
       plan: plan,
       summary: generatePlanSummary(plan)
     };
-
   } catch (error) {
     console.error('❌ API error:', error.response?.data || error.message);
     

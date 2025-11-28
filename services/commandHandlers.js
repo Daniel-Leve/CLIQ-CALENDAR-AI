@@ -3,9 +3,6 @@ const userManager = require('../db/userManager');
 const cliqCards = require('./cliqCards');
 const perplexityAgent = require('./perplexityAgent');
 const workLifeBalanceAI = require('./workLifeBalanceAI');
-/**
- * Handle /today command - Show today's schedule
- */
 async function handleTodayCommand(userId) {
   const userTokens = userManager.getUserTokens(userId);
   
@@ -66,9 +63,7 @@ async function handleTodayCommand(userId) {
   }
 }
 
-/**
- * Handle /week command - Show this week's schedule
- */
+//  Show this week's schedule
 async function handleWeekCommand(userId) {
   const userTokens = userManager.getUserTokens(userId);
   
@@ -107,8 +102,6 @@ async function handleWeekCommand(userId) {
         text: `📊 **This Week's Schedule**\n\n✨ No events scheduled this week!`
       };
     }
-
-    // Group by day
     const eventsByDay = {};
     events.forEach(event => {
       const date = new Date(event.start.dateTime || event.start.date);
@@ -143,10 +136,6 @@ async function handleWeekCommand(userId) {
   }
 }
 
-
-/**
- * Handle /delete command - Delete specific event
- */
 async function handleDeleteCommand(userId, commandArgs) {
   const userTokens = userManager.getUserTokens(userId);
   
@@ -167,7 +156,6 @@ async function handleDeleteCommand(userId, commandArgs) {
   }
 
   try {
-    // Use AI to extract event details
     const aiResult = await perplexityAgent.extractEventDetails(commandArgs, {
       timezone: 'Asia/Kolkata',
       workHours: '09:00-18:00'
@@ -181,7 +169,6 @@ async function handleDeleteCommand(userId, commandArgs) {
 
     const event = aiResult.event;
     
-    // Search for matching events
     const { google } = require('googleapis');
     const oauth2Client = googleCalendar.getOAuthClient();
     oauth2Client.setCredentials(userTokens);
@@ -201,7 +188,6 @@ async function handleDeleteCommand(userId, commandArgs) {
 
     const events = response.data.items || [];
     
-    // Find matching event by title and time
     let matchingEvent = null;
     
     if (events.length === 0) {
@@ -210,12 +196,10 @@ async function handleDeleteCommand(userId, commandArgs) {
       };
     }
 
-    // Try to match by title
     matchingEvent = events.find(e => 
       e.summary && e.summary.toLowerCase().includes(event.title.toLowerCase())
     );
 
-    // If time specified, also match by time
     if (event.time && matchingEvent) {
       const eventStartTime = new Date(matchingEvent.start.dateTime).toLocaleTimeString('en-US', { 
         hour: '2-digit', 
@@ -238,7 +222,6 @@ async function handleDeleteCommand(userId, commandArgs) {
     }
 
     if (!matchingEvent) {
-      // Show available events for that day
       const eventList = events.map((e, i) => {
         const start = new Date(e.start.dateTime || e.start.date);
         return `${i + 1}. **${e.summary}** at ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
@@ -249,8 +232,6 @@ async function handleDeleteCommand(userId, commandArgs) {
               `Try: \`/delete [exact event name] at [time]\``
       };
     }
-
-    // Delete the event
     await calendar.events.delete({
       calendarId: 'primary',
       eventId: matchingEvent.id,
@@ -273,9 +254,6 @@ async function handleDeleteCommand(userId, commandArgs) {
   }
 }
 
-/**
- * Handle /update command - Update specific event
- */
 async function handleUpdateCommand(userId, commandArgs) {
   const userTokens = userManager.getUserTokens(userId);
   
@@ -296,16 +274,11 @@ async function handleUpdateCommand(userId, commandArgs) {
   }
 
   try {
-    // Parse update command - look for keywords
     let originalEventText = commandArgs;
     let updates = {};
-    
-    // Check for time change keywords
     if (commandArgs.includes(' to ') || commandArgs.includes(' change time to ')) {
       const parts = commandArgs.split(/\s+to\s+|\s+change time to\s+/i);
       originalEventText = parts[0];
-      
-      // Extract new time from second part
       const newTimePart = parts[1];
       const timeMatch = newTimePart.match(/(\d{1,2}):?(\d{2})?\s*(AM|PM)?/i);
       
@@ -323,15 +296,11 @@ async function handleUpdateCommand(userId, commandArgs) {
         updates.newTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
       }
     }
-    
-    // Check for date change keywords
     if (commandArgs.includes(' move to ') || commandArgs.includes(' reschedule to ')) {
       const parts = commandArgs.split(/\s+move to\s+|\s+reschedule to\s+/i);
       originalEventText = parts[0];
       updates.newDateText = parts[1];
     }
-
-    // Extract original event details
     const aiResult = await perplexityAgent.extractEventDetails(originalEventText, {
       timezone: 'Asia/Kolkata',
       workHours: '09:00-18:00'
@@ -342,10 +311,7 @@ async function handleUpdateCommand(userId, commandArgs) {
         text: "❌ I couldn't understand which event to update.\n\nPlease specify the event name, date, and what to change."
       };
     }
-
     const event = aiResult.event;
-    
-    // Search for matching event
     const { google } = require('googleapis');
     const oauth2Client = googleCalendar.getOAuthClient();
     oauth2Client.setCredentials(userTokens);
@@ -379,16 +345,11 @@ async function handleUpdateCommand(userId, commandArgs) {
         text: `❌ Couldn't find matching event.\n\n**Events on ${event.date}:**\n${eventList}`
       };
     }
-
-    // Build update object
     const existingEvent = await calendar.events.get({
       calendarId: 'primary',
       eventId: matchingEvent.id,
     });
-
     const eventToUpdate = existingEvent.data;
-    
-    // Apply updates
     if (updates.newTime) {
       const currentStart = new Date(eventToUpdate.start.dateTime);
       const currentEnd = new Date(eventToUpdate.end.dateTime);
@@ -407,7 +368,6 @@ async function handleUpdateCommand(userId, commandArgs) {
     }
     
     if (updates.newDateText) {
-      // Use AI to extract new date
       const newDateAI = await perplexityAgent.extractEventDetails(`event on ${updates.newDateText}`, {
         timezone: 'Asia/Kolkata'
       });
@@ -428,8 +388,6 @@ async function handleUpdateCommand(userId, commandArgs) {
         eventToUpdate.end.dateTime = newEnd.toISOString();
       }
     }
-
-    // Update the event
     const updatedEvent = await calendar.events.update({
       calendarId: 'primary',
       eventId: matchingEvent.id,
@@ -456,14 +414,6 @@ async function handleUpdateCommand(userId, commandArgs) {
   }
 }
 
-// ... existing functions ...
-
-/**
- * Handle /balance command - Show work-life balance report
- */
-/**
- * Handle /balance command - Show work-life balance report
- */
 async function handleBalanceCommand(userId) {
   console.log('📊 Balance command called for user:', userId);
   
@@ -506,8 +456,6 @@ async function handleBalanceCommand(userId) {
     const events = response.data.items || [];
     
     console.log(`✅ Retrieved ${events.length} events`);
-    
-    // Analyze work-life balance
     console.log('🧠 Analyzing work-life balance...');
     
     const analysis = await workLifeBalanceAI.analyzeWorkLifeBalance(events, {
@@ -517,8 +465,6 @@ async function handleBalanceCommand(userId) {
     });
 
     console.log('📊 Analysis complete:', analysis);
-
-    // Build response text
     const score = analysis.workLifeScore;
     const emoji = score >= 80 ? '🟢' : score >= 60 ? '🟡' : '🔴';
 
@@ -535,12 +481,10 @@ async function handleBalanceCommand(userId) {
           (analysis.recommendations.length > 0 ? analysis.recommendations.map(r => `• ${r}`).join('\n') : '');
     
     console.log('✅ Built response, returning now');
-    
-    // CRITICAL: Return the response object
     const finalResponse = { text: responseText };
     console.log('✅ Final response object:', finalResponse);
     
-    return finalResponse;  // ← MAKE SURE THIS IS HERE!
+    return finalResponse; 
 
   } catch (error) {
     console.error('❌ Error analyzing balance:', error);
@@ -550,10 +494,6 @@ async function handleBalanceCommand(userId) {
     };
   }
 }
-
-
-
-
 module.exports = {
   handleTodayCommand,
   handleWeekCommand,

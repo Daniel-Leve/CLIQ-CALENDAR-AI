@@ -1,9 +1,6 @@
 require('dotenv').config();
 const perplexityAgent = require('./perplexityAgent');
 
-/**
- * Analyze work-life balance based on calendar data
- */
 async function analyzeWorkLifeBalance(events, userPreferences = {}) {
   const analysis = {
     workHours: 0,
@@ -19,40 +16,28 @@ async function analyzeWorkLifeBalance(events, userPreferences = {}) {
   const workStart = userPreferences.workStart || '09:00';
   const workEnd = userPreferences.workEnd || '18:00';
   const targetSleepHours = userPreferences.targetSleepHours || 7;
-
-  // Calculate metrics
   events.forEach(event => {
     const start = new Date(event.start.dateTime || event.start.date);
     const end = new Date(event.end.dateTime || event.end.date);
     const duration = (end - start) / (1000 * 60 * 60); // hours
-
     const eventHour = start.getHours();
-    
-    // Count work hours (within work hours)
     if (eventHour >= parseInt(workStart.split(':')[0]) && 
         eventHour < parseInt(workEnd.split(':')[0])) {
       analysis.workHours += duration;
-      
-      // Count meetings
       if (event.summary.toLowerCase().includes('meeting') || 
           event.summary.toLowerCase().includes('call') ||
           event.summary.toLowerCase().includes('sync')) {
         analysis.meetingsCount++;
       }
     } else {
-      // Work outside normal hours
       analysis.overTimeHours += duration;
     }
-    
-    // Count focus time blocks
     if (event.summary.toLowerCase().includes('focus') || 
         event.summary.toLowerCase().includes('deep work') ||
         event.summary.toLowerCase().includes('coding')) {
       analysis.focusTimeHours += duration;
     }
   });
-
-  // Check for sleep schedule (events with "sleep" in title)
   const sleepEvents = events.filter(e => 
     e.summary.toLowerCase().includes('sleep') || 
     e.summary.toLowerCase().includes('bedtime')
@@ -66,10 +51,8 @@ async function analyzeWorkLifeBalance(events, userPreferences = {}) {
     }, 0);
     analysis.avgSleepHours = totalSleepHours / sleepEvents.length;
   } else {
-    analysis.avgSleepHours = 7; // Assume 7 if not tracked
+    analysis.avgSleepHours = 7; 
   }
-
-  // Detect issues
   if (analysis.workHours > 45) {
     analysis.issues.push(`⚠️ Working ${Math.round(analysis.workHours)} hours (recommended: max 40)`);
   }
@@ -89,8 +72,6 @@ async function analyzeWorkLifeBalance(events, userPreferences = {}) {
   if (analysis.avgSleepHours < targetSleepHours) {
     analysis.issues.push(`⚠️ Average ${analysis.avgSleepHours.toFixed(1)} hours sleep (target: ${targetSleepHours})`);
   }
-
-  // Generate recommendations
   if (analysis.meetingsCount > 12) {
     analysis.recommendations.push('📅 Consider declining optional meetings or combining similar ones');
   }
@@ -110,13 +91,10 @@ async function analyzeWorkLifeBalance(events, userPreferences = {}) {
   if (analysis.avgSleepHours < targetSleepHours) {
     analysis.recommendations.push('😴 Schedule consistent sleep times: aim for 7-8 hours nightly');
   }
-
-  // Add general wellness recommendations
   if (analysis.meetingsCount > 0 && analysis.focusTimeHours === 0) {
     analysis.recommendations.push('💡 Balance meetings with dedicated focus time blocks');
   }
 
-  // Calculate work-life score (0-100)
   let score = 100;
   
   score -= Math.max(0, (analysis.workHours - 40) * 2); // -2 points per hour over 40
@@ -127,7 +105,6 @@ async function analyzeWorkLifeBalance(events, userPreferences = {}) {
   
   analysis.workLifeScore = Math.max(0, Math.min(100, Math.round(score)));
 
-  // If no issues, add positive feedback
   if (analysis.issues.length === 0) {
     analysis.recommendations.push('✅ Great balance! Keep maintaining this schedule');
     analysis.recommendations.push('🎯 Continue prioritizing sleep and focus time');
@@ -135,10 +112,8 @@ async function analyzeWorkLifeBalance(events, userPreferences = {}) {
 
   return analysis;
 }
-
-/**
- * Get AI-powered scheduling suggestions
- */
+ 
+ 
 async function getSmartSchedulingSuggestions(tasks, existingEvents) {
   const currentDate = new Date();
   

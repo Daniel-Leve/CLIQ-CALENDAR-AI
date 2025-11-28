@@ -1,12 +1,8 @@
 const axios = require('axios');
 require('dotenv').config();
-
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_API_URL = 'https://api.perplexity.ai/chat/completions';
 
-/**
- * Extract task/event details from natural language using Perplexity AI
- */
 async function extractEventDetails(userMessage, userContext = {}) {
   const currentDate = new Date();
   const dayOfWeek = currentDate.toLocaleDateString('en-US', { weekday: 'long' });
@@ -75,20 +71,17 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
     const aiResponse = response.data.choices[0].message.content;
     console.log('📊 Perplexity AI Response:', aiResponse);
-// Parse JSON response
 let eventData;
 try {
   let cleanedResponse = aiResponse.trim();
-      
-      // Remove code block markers safely
       if (cleanedResponse.startsWith('```json')) {
-        cleanedResponse = cleanedResponse.substring(7); // Remove ```
+        cleanedResponse = cleanedResponse.substring(7); 
       }
       if (cleanedResponse.startsWith('```')) {
-        cleanedResponse = cleanedResponse.substring(3); // Remove ```
+        cleanedResponse = cleanedResponse.substring(3); 
       }
       if (cleanedResponse.endsWith('```')) {
-        cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length - 3); // Remove trailing ```
+        cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length - 3); 
       }
       
       cleanedResponse = cleanedResponse.trim();
@@ -104,8 +97,6 @@ try {
     rawResponse: aiResponse
   };
 }
-
-    // Validate required fields
     if (!eventData.title || !eventData.date) {
       return {
         success: false,
@@ -133,9 +124,6 @@ try {
   }
 }
 
-/**
- * Suggest optimal time for a task based on workload analysis
- */
 async function suggestOptimalSchedule(tasks, timeframe = 'today') {
   const systemPrompt = `You are a productivity expert. Analyze the given tasks and suggest an optimal schedule.
 
