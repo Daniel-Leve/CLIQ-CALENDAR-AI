@@ -11,6 +11,10 @@ const commandHandlers = require('./services/commandHandlers');
 const smartPlanner = require('./services/smartPlanner');
 require('dotenv').config();
 
+// Temporary storage for edit sessions (eventId by userId)
+const editSessions = new Map();
+
+
 const app = express();
 
 app.set('trust proxy', 1); 
@@ -692,23 +696,202 @@ function generateInsights(currentTasks, optimizedPlan) {
   return insights.join('\n\n');
 }
 
-
-
-// // Generate daily briefing data
-// app.post('/command/briefing', verifyCliqRequest, async (req, res) => {
+// Update event endpoint
+// app.post('/calendar/update', verifyCliqRequest, async (req, res) => {
 //   try {
-//     const userId = req.body.userId || req.body.user?.id || 'test_user';
+//     const { userId, eventId, summary, date, startTime, endTime } = req.body;
     
-//     console.log('📧 Generating briefing for user:', userId);
+//     console.log(`📝 Update request: Event ${eventId} by user ${userId}`);
     
+//     const userTokens = userManager.getUserTokens(userId);
+//     if (!userTokens) {
+//       return res.json({ success: false, error: 'Not authenticated' });
+//     }
+    
+//     const { google } = require('googleapis');
+//     const oauth2Client = googleCalendar.getOAuthClient();
+//     oauth2Client.setCredentials(userTokens);
+    
+//     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    
+//     // Build ISO datetime strings
+//     const startDateTime = `${date}T${startTime}:00+05:30`;
+//     const endDateTime = `${date}T${endTime}:00+05:30`;
+    
+//     await calendar.events.update({
+//       calendarId: 'primary',
+//       eventId: eventId,
+//       resource: {
+//         summary: summary,
+//         start: { dateTime: startDateTime, timeZone: 'Asia/Kolkata' },
+//         end: { dateTime: endDateTime, timeZone: 'Asia/Kolkata' }
+//       }
+//     });
+    
+//     console.log('✅ Event updated successfully');
+//     res.json({ success: true, message: 'Task updated' });
+    
+//   } catch (error) {
+//     console.error('❌ Update error:', error.message);
+//     res.json({ success: false, error: error.message });
+//   }
+// });
+
+// Update existing event
+app.post('/calendar/update', verifyCliqRequest, async (req, res) => {
+  try {
+    const { userId, summary, date, startTime, endTime } = req.body;
+    
+    // Get eventId from session storage
+    const eventId = editSessions.get(userId);
+    
+    if (!eventId) {
+      console.log('❌ No edit session found');
+      return res.json({ success: false, error: 'No edit session found. Please try again.' });
+    }
+    
+    console.log(`✏️ Update event request: ${eventId} by user ${userId}`);
+    console.log(`   Task: ${summary}`);
+    console.log(`   Date: ${date}`);
+    console.log(`   Time: ${startTime} - ${endTime}`);
+    
+    const userTokens = userManager.getUserTokens(userId);
+    if (!userTokens) {
+      return res.json({ success: false, error: 'Not authenticated' });
+    }
+    
+    const { google } = require('googleapis');
+    const oauth2Client = googleCalendar.getOAuthClient();
+    oauth2Client.setCredentials(userTokens);
+    
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    
+    // Build ISO datetime strings with IST timezone
+    const startDateTime = `${date}T${startTime}:00+05:30`;
+    const endDateTime = `${date}T${endTime}:00+05:30`;
+    
+    const event = await calendar.events.update({
+      calendarId: 'primary',
+      eventId: eventId,
+      resource: {
+        summary: summary,
+        start: { 
+          dateTime: startDateTime, 
+          timeZone: 'Asia/Kolkata' 
+        },
+        end: { 
+          dateTime: endDateTime, 
+          timeZone: 'Asia/Kolkata' 
+        }
+      }
+    });
+    
+    // Clear session after successful update
+    editSessions.delete(userId);
+    
+    console.log('✅ Event updated successfully');
+    res.json({ 
+      success: true, 
+      message: 'Task updated successfully',
+      eventId: event.data.id 
+    });
+    
+  } catch (error) {
+    console.error('❌ Update error:', error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
+
+// Delete event endpoint
+// app.post('/calendar/delete', verifyCliqRequest, async (req, res) => {
+//   try {
+//     const { userId, eventId } = req.body;
+    
+//     console.log(`🗑️ Delete request: Event ${eventId} by user ${userId}`);
+    
+//     const userTokens = userManager.getUserTokens(userId);
+//     if (!userTokens) {
+//       return res.json({ success: false, error: 'Not authenticated' });
+//     }
+    
+//     const { google } = require('googleapis');
+//     const oauth2Client = googleCalendar.getOAuthClient();
+//     oauth2Client.setCredentials(userTokens);
+    
+//     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    
+//     await calendar.events.delete({
+//       calendarId: 'primary',
+//       eventId: eventId
+//     });
+    
+//     console.log('✅ Event deleted successfully');
+//     res.json({ success: true, message: 'Task deleted' });
+    
+//   } catch (error) {
+//     console.error('❌ Delete error:', error.message);
+//     res.json({ success: false, error: error.message });
+//   }
+// });
+
+// Delete event
+app.post('/calendar/delete', verifyCliqRequest, async (req, res) => {
+  try {
+    const { userId, eventId } = req.body;
+    
+    console.log(`🗑️ Delete event request: ${eventId} by user ${userId}`);
+    
+    const userTokens = userManager.getUserTokens(userId);
+    if (!userTokens) {
+      return res.json({ success: false, error: 'Not authenticated' });
+    }
+    
+    const { google } = require('googleapis');
+    const oauth2Client = googleCalendar.getOAuthClient();
+    oauth2Client.setCredentials(userTokens);
+    
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    
+    await calendar.events.delete({
+      calendarId: 'primary',
+      eventId: eventId
+    });
+    
+    console.log('✅ Event deleted successfully');
+    res.json({ 
+      success: true, 
+      message: 'Task deleted successfully' 
+    });
+    
+  } catch (error) {
+    console.error('❌ Delete error:', error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
+
+
+// app.post('/widget/today', verifyCliqRequest, async (req, res) => {
+//   try {
+//     const userId = req.body.userId || 'unknown';
+//     const tabId = req.body.tabId || 'overview';
+//     const eventType = req.body.eventType || 'load';
+    
+//     console.log(`📊 Widget ${eventType} from user: ${userId} | Tab: ${tabId}`);
+    
+//     if (userId === 'unknown') {
+//       return res.json(buildErrorWidget('Could not identify user'));
+//     }
+
 //     const userTokens = userManager.getUserTokens(userId);
     
 //     if (!userTokens) {
-//       return res.json({
-//         text: "🔗 Please connect your Google Calendar first!"
-//       });
+//       console.log('❌ No tokens found');
+//       return res.json(buildErrorWidget('Please connect your Google Calendar first using /connect command'));
 //     }
 
+//     // Fetch today's events
 //     const today = new Date();
 //     const todayStr = today.toISOString().split('T')[0];
     
@@ -728,40 +911,531 @@ function generateInsights(currentTasks, optimizedPlan) {
 
 //     const events = response.data.items || [];
     
-//     const schedule = events.map(event => {
-//       const start = new Date(event.start.dateTime || event.start.date);
-//       const end = new Date(event.end.dateTime || event.end.date);
-//       const duration = (end - start) / (1000 * 60 * 60);
-      
-//       return {
-//         time: start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-//         title: event.summary,
-//         duration: duration
-//       };
-//     });
+//     console.log(`✅ Found ${events.length} events for widget`);
 
-//     const tasks = [];
-//     const suggestions = [
-//       '🎯 Focus on high-priority tasks first',
-//       '💡 Take breaks every hour'
-//     ];
-
-//     const briefingCard = cliqCards.buildDailyBriefingCard(schedule, tasks, suggestions);
-
-//     console.log('✅ Briefing generated');
+//     // Build widget response
+//     const widgetData = buildTodayWidget(events, today, tabId);
     
-//     res.json(briefingCard);
+//     console.log('📤 Widget structure:', JSON.stringify({
+//       type: widgetData.type,
+//       tabCount: widgetData.tabs?.length || 0,
+//       activeTab: widgetData.active_tab,
+//       sections: widgetData.tabs?.map(t => ({
+//         id: t.id,
+//         sectionCount: t.id === tabId ? widgetData.sections?.length || 0 : 0
+//       }))
+//     }, null, 2));
+    
+//     res.json(widgetData);
 
 //   } catch (error) {
-//     console.error('❌ Error generating briefing:', error);
-//     res.json({ text: '❌ Error generating briefing' });
+//     console.error('❌ Widget error:', error.message);
+    
+//     if (!res.headersSent) {
+//       res.json(buildErrorWidget('Error loading calendar data: ' + error.message));
+//     }
 //   }
 // });
 
 
+app.post('/widget/today', verifyCliqRequest, async (req, res) => {
+  try {
+    const userId = req.body.userId || 'unknown';
+    const eventType = req.body.eventType || 'load';
+    
+    console.log(`📊 Widget ${eventType} from user: ${userId}`);
+    
+    if (userId === 'unknown') {
+      return res.json(buildErrorWidget('Could not identify user'));
+    }
+
+    const userTokens = userManager.getUserTokens(userId);
+    
+    if (!userTokens) {
+      console.log('❌ No tokens found');
+      return res.json(buildErrorWidget('Please connect your Google Calendar first using /connect command'));
+    }
+
+    // Fetch today's events
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    const { google } = require('googleapis');
+    const oauth2Client = googleCalendar.getOAuthClient();
+    oauth2Client.setCredentials(userTokens);
+    
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    
+    const response = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: `${todayStr}T00:00:00+05:30`,
+      timeMax: `${todayStr}T23:59:59+05:30`,
+      singleEvents: true,
+      orderBy: 'startTime',
+    });
+
+    const events = response.data.items || [];
+    
+    console.log(`✅ Found ${events.length} events for widget`);
+
+    // Build widget response (single overview tab only)
+    const widgetData = buildTodayWidget(events, today, userId);
+    
+    console.log('📤 Widget structure:', JSON.stringify({
+      type: widgetData.type,
+      tabCount: widgetData.tabs?.length || 0,
+      sectionsCount: widgetData.sections?.length || 0
+    }, null, 2));
+    
+    res.json(widgetData);
+
+  } catch (error) {
+    console.error('❌ Widget error:', error.message);
+    
+    if (!res.headersSent) {
+      res.json(buildErrorWidget('Error loading calendar data: ' + error.message));
+    }
+  }
+});
 
 
-// 404 handler
+/**
+ * Build Today's Tasks Widget - CORRECTED VERSION
+ * Following Zoho Cliq widget documentation structure
+ */
+// function buildTodayWidget(events, currentDate, activeTabId = 'overview') {
+//   console.log('🔨 Building widget for', events.length, 'events');
+  
+//   const now = new Date();
+//   const currentTime = now.getTime();
+  
+//   // Categorize events
+//   const upcoming = [];
+//   const inProgress = [];
+//   const completed = [];
+  
+//   events.forEach(event => {
+//     const start = new Date(event.start.dateTime || event.start.date);
+//     const end = new Date(event.end.dateTime || event.end.date);
+    
+//     if (end.getTime() < currentTime) {
+//       completed.push(event);
+//     } else if (start.getTime() <= currentTime && end.getTime() >= currentTime) {
+//       inProgress.push(event);
+//     } else {
+//       upcoming.push(event);
+//     }
+//   });
+  
+//   // ========================================
+//   // BUILD WIDGET STRUCTURE
+//   // ========================================
+//   const widget = {
+//     type: "applet",
+//     tabs: [
+//       { label: "Overview", id: "overview" },
+//       { label: "All Tasks", id: "all_tasks" }
+//     ],
+//     active_tab: activeTabId,
+//     sections: [], // Will be populated based on active tab
+//     header: {
+//       title: `📅 Today - ${currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+//       navigation: "new"
+//     }
+//   };
+  
+//   // ========================================
+//   // BUILD SECTIONS BASED ON ACTIVE TAB
+//   // ========================================
+  
+//   if (activeTabId === 'overview') {
+//     widget.sections = buildOverviewSections(events, completed, inProgress, upcoming, currentTime);
+//   } else if (activeTabId === 'all_tasks') {
+//     widget.sections = buildAllTasksSections(events, currentTime);
+//   }
+  
+//   console.log(`✅ Widget built: ${widget.sections.length} sections for tab '${activeTabId}'`);
+  
+//   return widget;
+// }
+
+
+function buildTodayWidget(events, currentDate, userId) {
+  console.log('🔨 Building widget for', events.length, 'events');
+  
+  const now = new Date();
+  const currentTime = now.getTime();
+  
+  // Categorize events
+  const upcoming = [];
+  const inProgress = [];
+  const completed = [];
+  
+  events.forEach(event => {
+    const start = new Date(event.start.dateTime || event.start.date);
+    const end = new Date(event.end.dateTime || event.end.date);
+    
+    if (end.getTime() < currentTime) {
+      completed.push(event);
+    } else if (start.getTime() <= currentTime && end.getTime() >= currentTime) {
+      inProgress.push(event);
+    } else {
+      upcoming.push(event);
+    }
+  });
+  
+  // ========================================
+  // BUILD WIDGET STRUCTURE - SINGLE TAB
+  // ========================================
+  const widget = {
+    type: "applet",
+    tabs: [
+      { label: "Today's Tasks", id: "overview" }
+    ],
+    active_tab: "overview",
+    sections: [],
+    header: {
+  title: `📅 Today - ${currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+  navigation: "new"
+  // No buttons array → no Add Task button
+}
+
+  };
+  
+  // ========================================
+  // SECTION 1: SUMMARY STATS
+  // ========================================
+  const statsElements = [];
+  
+  statsElements.push({
+    type: "title",
+    text: "📊 Today's Summary"
+  });
+  
+  statsElements.push({
+    type: "text",
+    text: `✅ Completed: **${completed.length}** | ` +
+          `🔵 In Progress: **${inProgress.length}** | ` +
+          `⏳ Upcoming: **${upcoming.length}**`
+  });
+  
+  statsElements.push({ type: "divider" });
+  
+  widget.sections.push({
+    id: 1,
+    elements: statsElements
+  });
+  
+  // ========================================
+  // SECTION 2: ALL TASKS LIST
+  // ========================================
+  if (events.length === 0) {
+    // Empty state
+    const emptyElements = [];
+    emptyElements.push({
+      type: "text",
+      text: "📭 **No tasks scheduled for today!**\n\nClick **➕ Add Task** to create one."
+    });
+    
+    widget.sections.push({
+      id: 2,
+      elements: emptyElements
+    });
+  } else {
+    // Title for task list
+    const titleElements = [];
+    titleElements.push({
+      type: "title",
+      text: `📋 All Tasks (${events.length})`
+    });
+    
+    widget.sections.push({
+      id: 2,
+      elements: titleElements
+    });
+    
+    // Add each task as a separate section with Edit/Delete buttons
+    events.forEach((event, idx) => {
+      const start = new Date(event.start.dateTime || event.start.date);
+      const end = new Date(event.end.dateTime || event.end.date);
+      const duration = Math.round((end - start) / (1000 * 60 * 60) * 10) / 10;
+      
+      // Determine status
+      let status = '⏳';
+      let statusText = 'Upcoming';
+      let statusColor = 'gray';
+      
+      if (end.getTime() < currentTime) {
+        status = '✅';
+        statusText = 'Completed';
+        statusColor = 'green';
+      } else if (start.getTime() <= currentTime) {
+        status = '🔵';
+        statusText = 'In Progress';
+        statusColor = 'blue';
+      }
+      
+      const taskElements = [];
+      
+      // Task title and time
+      taskElements.push({
+        type: "text",
+        text: `${status} **${event.summary}**\n` +
+              `⏰ ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} - ` +
+              `${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} ` +
+              `(${duration}h) • _${statusText}_`
+      });
+      
+      // Action buttons (Edit and Delete)
+        const editButton = {
+        label: "✏️ Edit",
+        type: "invoke.function",
+        name: "editTaskFromWidget",
+        // encode eventId as edit_<eventId>
+        id: `edit_${event.id}`
+        };
+
+      
+        const deleteButton = {
+        label: "🗑️ Delete",
+        type: "invoke.function",
+        name: "deleteTaskFromWidget",
+        id: `del_${event.id}`,
+        emotion: "negative"
+        };
+
+      
+      taskElements.push({
+        type: "buttons",
+        buttons: [editButton, deleteButton]
+      });
+      
+      taskElements.push({ type: "divider" });
+      
+      widget.sections.push({
+        id: idx + 3, // Start from 3 (after stats and title sections)
+        elements: taskElements
+      });
+    });
+  }
+  
+  console.log(`✅ Widget built with ${widget.sections.length} sections`);
+  
+  return widget;
+}
+
+
+/**
+ * Build Overview Tab Sections
+ */
+// function buildOverviewSections(events, completed, inProgress, upcoming, currentTime) {
+//   const sections = [];
+  
+//   // ========================================
+//   // SECTION 1: STATS
+//   // ========================================
+//   const statsElements = [];
+  
+//   statsElements.push({
+//     type: "title",
+//     text: "📊 Today's Summary"
+//   });
+  
+//   statsElements.push({
+//     type: "text",
+//     text: `✅ Completed: **${completed.length}**  \n` +
+//           `🔵 In Progress: **${inProgress.length}**  \n` +
+//           `⏳ Upcoming: **${upcoming.length}**  \n` +
+//           `📊 Total Tasks: **${events.length}**`
+//   });
+  
+//   statsElements.push({ type: "divider" });
+  
+//   sections.push({
+//     id: 1,
+//     elements: statsElements
+//   });
+  
+//   // ========================================
+//   // SECTION 2: CURRENT TASK (if exists)
+//   // ========================================
+//   if (inProgress.length > 0) {
+//     const currentElements = [];
+//     const currentEvent = inProgress[0];
+//     const start = new Date(currentEvent.start.dateTime || currentEvent.start.date);
+//     const end = new Date(currentEvent.end.dateTime || currentEvent.end.date);
+    
+//     currentElements.push({
+//       type: "title",
+//       text: "🔵 Currently Working On"
+//     });
+    
+//     currentElements.push({
+//       type: "text",
+//       text: `**${currentEvent.summary}**  \n` +
+//             `⏰ ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ` +
+//             `${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+//     });
+    
+//     currentElements.push({ type: "divider" });
+    
+//     sections.push({
+//       id: 2,
+//       elements: currentElements
+//     });
+//   }
+  
+//   // ========================================
+//   // SECTION 3: NEXT TASK (if exists)
+//   // ========================================
+//   if (upcoming.length > 0) {
+//     const nextElements = [];
+//     const nextEvent = upcoming[0];
+//     const start = new Date(nextEvent.start.dateTime || nextEvent.start.date);
+//     const minutesUntil = Math.round((start.getTime() - currentTime) / 60000);
+    
+//     nextElements.push({
+//       type: "title",
+//       text: "⏳ Up Next"
+//     });
+    
+//     nextElements.push({
+//       type: "text",
+//       text: `**${nextEvent.summary}**  \n` +
+//             `⏰ ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} ` +
+//             `(in ${minutesUntil} minutes)`
+//     });
+    
+//     nextElements.push({ type: "divider" });
+    
+//     sections.push({
+//       id: 3,
+//       elements: nextElements
+//     });
+//   }
+  
+//   // ========================================
+//   // SECTION 4: EMPTY STATE (if no tasks)
+//   // ========================================
+//   if (events.length === 0) {
+//     const emptyElements = [];
+    
+//     emptyElements.push({
+//       type: "text",
+//       text: "📭 **No tasks scheduled for today!**  \n\nEnjoy your free time! 🎉"
+//     });
+    
+//     sections.push({
+//       id: 4,
+//       elements: emptyElements
+//     });
+//   }
+  
+//   return sections;
+// }
+
+/**
+ * Build All Tasks Tab Sections
+ */
+// function buildAllTasksSections(events, currentTime) {
+//   const sections = [];
+  
+//   if (events.length === 0) {
+//     // Empty state
+//     sections.push({
+//       id: 1,
+//       elements: [{
+//         type: "text",
+//         text: "📭 **No tasks scheduled for today!**  \n\nEnjoy your free time! 🎉"
+//       }]
+//     });
+    
+//     return sections;
+//   }
+  
+//   // Add each event as a separate section
+//   events.forEach((event, idx) => {
+//     const start = new Date(event.start.dateTime || event.start.date);
+//     const end = new Date(event.end.dateTime || event.end.date);
+//     const duration = Math.round((end - start) / (1000 * 60 * 60) * 10) / 10;
+    
+//     // Determine status
+//     let status = '⏳';
+//     let statusText = 'Upcoming';
+//     if (end.getTime() < currentTime) {
+//       status = '✅';
+//       statusText = 'Completed';
+//     } else if (start.getTime() <= currentTime) {
+//       status = '🔵';
+//       statusText = 'In Progress';
+//     }
+    
+//     const elements = [];
+    
+//     // Use activity element for better visual presentation
+//     elements.push({
+//       type: "activity",
+//       title: `${status} ${event.summary}`,
+//       description: `⏰ ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })} - ` +
+//                    `${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })} ` +
+//                    `(${duration}h) • ${statusText}`
+//     });
+    
+//     elements.push({ type: "divider" });
+    
+//     sections.push({
+//       id: idx + 1,
+//       elements: elements
+//     });
+//   });
+  
+//   return sections;
+// }
+
+
+function buildErrorWidget(errorMessage) {
+  return {
+    type: "applet",
+    data_type: "info",
+    info: {
+      title: "⚠️ Tasks Widget Error",
+      description: errorMessage,
+      image_url: "https://i.ibb.co/gSP05Yr/Cliq-automation.png",
+      button: {
+        label: "Connect Calendar",
+        type: "invoke.function",
+        name: "connectCalendar", // Your connection function name
+        id: "connect_btn"
+      }
+    },
+    tabs: [{
+      label: "Error",
+      id: "error_tab"
+    }],
+    active_tab: "error_tab"
+  };
+}
+
+// Start edit session - store eventId
+app.post('/widget/start-edit', verifyCliqRequest, async (req, res) => {
+  try {
+    const { userId, eventId } = req.body;
+    
+    console.log(`📝 Starting edit session for user ${userId}, event ${eventId}`);
+    
+    // Store eventId keyed by userId
+    editSessions.set(userId, eventId);
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('❌ Start edit error:', error.message);
+    res.json({ success: false, error: error.message });
+  }
+});
+
+
+
 app.use((req, res) => {
   console.warn(`404: ${req.method} ${req.path}`);
   res.status(404).json({ error: 'Endpoint not found' });
