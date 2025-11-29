@@ -398,21 +398,38 @@ async function handleUpdateCommand(userId, commandArgs) {
     const eventToUpdate = existingEvent.data;
 
     if (updates.newTime) {
-      const currentStart = new Date(eventToUpdate.start.dateTime);
-      const currentEnd = new Date(eventToUpdate.end.dateTime);
-      const duration = (currentEnd - currentStart) / (1000 * 60 * 60); // hours
-      
-      const [newHour, newMinute] = updates.newTime.split(':').map(Number);
-      
-      const newStart = new Date(currentStart);
-      newStart.setHours(newHour, newMinute, 0);
-      
-      const newEnd = new Date(newStart);
-      newEnd.setHours(newHour + Math.floor(duration), newMinute + ((duration % 1) * 60), 0);
-      
-      eventToUpdate.start.dateTime = newStart.toISOString();
-      eventToUpdate.end.dateTime = newEnd.toISOString();
-    }
+  // If event has only date (all-day) handle separately:
+  if (eventToUpdate.start.date) {
+    // it's an all-day event — can't set time-of-day; you may want to turn it into a dateTime event
+    // For now, return an error or convert per your app's rules
+    return { text: "❌ Cannot set time for an all-day event. Please provide a timed event." };
+  }
+
+  // original start and end ISO strings (keep the original timezone offset string)
+  const origStartISO = eventToUpdate.start.dateTime; // e.g. "2025-11-29T14:00:00+05:30"
+  const origEndISO   = eventToUpdate.end.dateTime;
+
+  // extract date part from the original ISO (the left side of 'T')
+  const datePart = origStartISO.split('T')[0]; // "2025-11-29"
+
+  // updates.newTime is "HH:MM" in 24-hour format from your earlier parsing, e.g. "14:00"
+  // compose an ISO string explicitly using the Asia/Kolkata offset
+  const newStartISOWithTZ = `${datePart}T${updates.newTime}:00+05:30`;
+
+  // compute duration in ms from original start/end (safer than reconstructing hours)
+  const origStart = new Date(origStartISO);
+  const origEnd = new Date(origEndISO);
+  const durationMs = origEnd.getTime() - origStart.getTime();
+
+  // create newStart Date from the composed ISO and then compute newEnd by adding durationMs
+  const newStart = new Date(newStartISOWithTZ);
+  const newEnd = new Date(newStart.getTime() + durationMs);
+
+  // set the event datetimes to ISO (Google Calendar accepts the full ISO with offset)
+  eventToUpdate.start.dateTime = newStart.toISOString(); // JS will convert to UTC Z format
+  eventToUpdate.end.dateTime   = newEnd.toISOString();
+}
+
     
     if (updates.newDateText) {
       const newDateAI = await perplexityAgent.extractEventDetails(`event on ${updates.newDateText}`, {
