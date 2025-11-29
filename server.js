@@ -493,7 +493,6 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
     }
 
     const userTokens = userManager.getUserTokens(userId);
-    
     if (!userTokens) {
       return res.json({
         text: '🔗 Please connect your Google Calendar first!'
@@ -501,10 +500,13 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
     }
     
     console.log('📅 Fetching today\'s calendar events...');
-    
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    
+
+    // Use IST for date and time
+    const baseTz = 'Asia/Kolkata';
+    const now = new Date();
+    const nowIST = new Date(now.toLocaleString('en-US', { timeZone: baseTz }));
+    const todayISO = nowIST.toISOString().split('T')[0]; // e.g. 2025-11-29
+
     const { google } = require('googleapis');
     const oauth2Client = googleCalendar.getOAuthClient();
     oauth2Client.setCredentials(userTokens);
@@ -513,14 +515,16 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
     
     const response = await calendar.events.list({
       calendarId: 'primary',
-      timeMin: `${todayStr}T00:00:00+05:30`,
-      timeMax: `${todayStr}T23:59:59+05:30`,
+      timeMin: `${todayISO}T00:00:00+05:30`,
+      timeMax: `${todayISO}T23:59:59+05:30`,
       singleEvents: true,
       orderBy: 'startTime',
+      timeZone: baseTz
     });
 
     const events = response.data.items || [];
-    
+    console.log(`✅ Raw events from Google: ${events.length}`);
+
     if (events.length === 0) {
       return res.json({
         text: '📭 You have no tasks scheduled for today!\n\n' +
@@ -530,35 +534,43 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
       });
     }
 
-    console.log(`✅ Found ${events.length} events today`);
-
+    // Convert events into tasks, using IST times
     const tasks = events.map(event => {
-      const start = new Date(event.start.dateTime || event.start.date);
-      const end = new Date(event.end.dateTime || event.end.date);
-      const duration = (end - start) / (1000 * 60 * 60); // hours
-      
+      const startRaw = new Date(event.start.dateTime || event.start.date);
+      const endRaw   = new Date(event.end.dateTime   || event.end.date);
+
+      const startIST = new Date(startRaw.toLocaleString('en-US', { timeZone: baseTz }));
+      const endIST   = new Date(endRaw.toLocaleString('en-US', { timeZone: baseTz }));
+
+      const duration = (endIST - startIST) / (1000 * 60 * 60); // hours
+
+      // All‑day events may show as 00:00; still include them as tasks
+      const currentTime = startIST.toLocaleTimeString('en-IN', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false,
+        timeZone: baseTz
+      });
+
       return {
-        title: event.summary,
-        currentTime: start.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
-          minute: '2-digit', 
-          hour12: false 
-        }),
-        duration: duration,
+        title: event.summary || '(No title)',
+        currentTime,
+        duration: duration || 1,
         description: event.description || ''
       };
-    });    
-    
-    console.log('🧠 Generating AI-optimized plan...');
+    });
 
-    const taskList = tasks.map(t => 
-      `${t.title} (currently at ${t.currentTime}, ${t.duration}h)`
-    ).join(', ');
+    console.log('🧠 Tasks passed to AI:', tasks);
+
+    console.log('🧠 Generating AI-optimized plan...');
+    const taskList = tasks
+      .map(t => `${t.title} (currently at ${t.currentTime}, ${t.duration}h)`)
+      .join(', ');
 
     const userContext = {
-      timezone: 'Asia/Kolkata',
+      timezone: baseTz,
       workHours: '09:00-18:00',
-      currentTime: today.toTimeString().slice(0, 5)
+      currentTime: nowIST.toTimeString().slice(0, 5)
     };
 
     const planResult = await smartPlanner.suggestOptimalPlan(taskList, userContext);
@@ -572,7 +584,6 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
     }
     
     const responseCard = buildOptimizedPlanCard(tasks, planResult.plan, planResult.summary);
-    
     res.json(responseCard);
 
   } catch (error) {
@@ -582,6 +593,7 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
     });
   }
 });
+
 
 
 function buildOptimizedPlanCard(currentTasks, optimizedPlan, summary) {
