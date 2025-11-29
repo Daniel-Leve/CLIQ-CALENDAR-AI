@@ -175,8 +175,18 @@ async function createCalendarEvent(userTokens, eventDetails) {
       }
     };
 
+    // Only add attendees if they look like valid email addresses
     if (eventDetails.participants && eventDetails.participants.length > 0) {
-      event.attendees = eventDetails.participants.map(email => ({ email }));
+      const validEmails = eventDetails.participants.filter(email => {
+        return email && email.includes('@') && email.includes('.');
+      });
+
+      if (validEmails.length > 0) {
+        event.attendees = validEmails.map(email => ({ email }));
+        console.log('✅ Valid attendees added:', validEmails);
+      } else {
+        console.log('⚠️ No valid attendee emails found, skipping attendees');
+      }
     }
     
     console.log('📤 Creating calendar event:', event.summary);
@@ -203,6 +213,7 @@ async function createCalendarEvent(userTokens, eventDetails) {
     };
   }
 }
+
 
 /**
  * Calculate end time from start time and duration
