@@ -605,16 +605,17 @@ function buildOptimizedPlanCard(currentTasks, optimizedPlan, summary) {
     slides: []
   };
 
+  // Slide 1: current schedule – ONLY titles, no times
   const currentSlide = {
     type: "text",
     title: "📅 Your Current Schedule",
     data: currentTasks.map((task, idx) => 
-      `${idx + 1}. **${task.title}**\n` +
-      `   ⏰ Currently: ${task.currentTime} (${task.duration}h)`
+      `${idx + 1}. **${task.title}**`
     ).join('\n\n')
   };
   response.slides.push(currentSlide);
 
+  // Slide 2: AI‑optimized schedule (keep times here)
   const recommendationsSlide = {
     type: "text",
     title: "🧠 AI-Optimized Schedule",
@@ -627,12 +628,15 @@ function buildOptimizedPlanCard(currentTasks, optimizedPlan, summary) {
   };
   response.slides.push(recommendationsSlide);
 
+  // Slide 3: insights
   const insightsSlide = {
     type: "text",
     title: "💡 Optimization Insights",
     data: generateInsights(currentTasks, optimizedPlan)
   };
   response.slides.push(insightsSlide);
+
+  // Slide 4: summary
   const summarySlide = {
     type: "text",
     title: "📊 Summary",
@@ -651,6 +655,7 @@ function buildOptimizedPlanCard(currentTasks, optimizedPlan, summary) {
 
   return response;
 }
+
 
 function generateInsights(currentTasks, optimizedPlan) {
   const insights = [];
