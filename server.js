@@ -317,9 +317,20 @@ app.post('/bot', verifyCliqRequest, async (req, res) => {
           `You already have something scheduled at ${event.time} on ${formatDate(event.date)}.\n\n` +
           `Busy slots:\n` +
           availabilityCheck.busySlots.map(slot => 
-            `• ${new Date(slot.start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ` +
-            `${new Date(slot.end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
-          ).join('\n')
+  `${new Date(slot.start).toLocaleTimeString('en-IN', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      })} - ` +
+  `${new Date(slot.end).toLocaleTimeString('en-IN', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      })}`
+)
+.join('\n')
   });
 }
     
@@ -370,7 +381,8 @@ function formatDate(dateString) {
     weekday: 'long', 
     year: 'numeric', 
     month: 'long', 
-    day: 'numeric' 
+    day: 'numeric',
+    timeZone: 'Asia/Kolkata'
   });
 }
 
@@ -489,9 +501,12 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
     }
     
     console.log('📅 Fetching today\'s calendar events...');
-    
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+
+    // Use IST for date and time
+    const baseTz = 'Asia/Kolkata';
+    const now = new Date();
+    const nowIST = new Date(now.toLocaleString('en-US', { timeZone: baseTz }));
+    const todayStr = nowIST.toLocaleDateString('en-CA', { timeZone: baseTz }); // YYYY-MM-DD
     
     const { google } = require('googleapis');
     const oauth2Client = googleCalendar.getOAuthClient();
@@ -521,16 +536,22 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
     console.log(`✅ Found ${events.length} events today`);
 
     const tasks = events.map(event => {
-      const start = new Date(event.start.dateTime || event.start.date);
-      const end = new Date(event.end.dateTime || event.end.date);
-      const duration = (end - start) / (1000 * 60 * 60); // hours
+      const startRaw = new Date(event.start.dateTime || event.start.date);
+      const endRaw = new Date(event.end.dateTime || event.end.date);
+
+      // Convert to IST for display and duration
+      const startIST = new Date(startRaw.toLocaleString('en-US', { timeZone: baseTz }));
+      const endIST = new Date(endRaw.toLocaleString('en-US', { timeZone: baseTz }));
+
+      const duration = (endIST - startIST) / (1000 * 60 * 60); // hours
       
       return {
         title: event.summary,
-        currentTime: start.toLocaleTimeString('en-US', { 
+        currentTime: startIST.toLocaleTimeString('en-IN', { 
           hour: '2-digit', 
           minute: '2-digit', 
-          hour12: false 
+          hour12: false,
+          timeZone: baseTz
         }),
         duration: duration,
         description: event.description || ''
@@ -544,9 +565,9 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
     ).join(', ');
 
     const userContext = {
-      timezone: 'Asia/Kolkata',
+      timezone: baseTz,
       workHours: '09:00-18:00',
-      currentTime: today.toTimeString().slice(0, 5)
+      currentTime: nowIST.toTimeString().slice(0, 5)
     };
 
     const planResult = await smartPlanner.suggestOptimalPlan(taskList, userContext);
@@ -570,6 +591,7 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
     });
   }
 });
+
 
 function buildOptimizedPlanCard(currentTasks, optimizedPlan, summary) {
   const response = {
