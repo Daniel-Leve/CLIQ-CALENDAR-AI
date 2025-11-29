@@ -57,6 +57,7 @@ async function exchangeCodeForTokens(code) {
     if (!tokens.access_token) {
       throw new Error('access_token missing from Google response');
     }
+
     return {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
@@ -72,6 +73,14 @@ async function exchangeCodeForTokens(code) {
   }
 }
 
+/**
+ * Check if a time slot is available in Google Calendar
+ * @param {Object} userTokens - User's Google OAuth tokens
+ * @param {string} date - Date in YYYY-MM-DD format
+ * @param {string} startTime - Start time in HH:MM format (24-hour)
+ * @param {string} endTime - End time in HH:MM format (24-hour)
+ * @returns {Object} Availability result with busy slots in IST
+ */
 async function checkAvailability(userTokens, date, startTime, endTime) {
   const oauth2Client = getOAuthClient();
   oauth2Client.setCredentials(userTokens);
@@ -94,12 +103,30 @@ async function checkAvailability(userTokens, date, startTime, endTime) {
     
     const busySlots = response.data.calendars.primary.busy || [];
     
-    console.log('📅 Availability check:', busySlots.length === 0 ? 'FREE' : 'BUSY');
+    // Convert busy slots to IST for display
+    const busySlotsIST = busySlots.map(slot => ({
+      start: new Date(slot.start),
+      end: new Date(slot.end),
+      startFormatted: new Date(slot.start).toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      }),
+      endFormatted: new Date(slot.end).toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      })
+    }));
+    
+    console.log('📅 Availability check:', busySlotsIST.length === 0 ? 'FREE' : 'BUSY');
     
     return {
       success: true,
-      available: busySlots.length === 0,
-      busySlots
+      available: busySlotsIST.length === 0,
+      busySlots: busySlotsIST
     };
     
   } catch (error) {
@@ -111,6 +138,12 @@ async function checkAvailability(userTokens, date, startTime, endTime) {
   }
 }
 
+/**
+ * Create a new calendar event in Google Calendar
+ * @param {Object} userTokens - User's Google OAuth tokens
+ * @param {Object} eventDetails - Event details (title, date, time, duration, etc.)
+ * @returns {Object} Creation result with event link
+ */
 async function createCalendarEvent(userTokens, eventDetails) {
   const oauth2Client = getOAuthClient();
   oauth2Client.setCredentials(userTokens);
@@ -141,6 +174,7 @@ async function createCalendarEvent(userTokens, eventDetails) {
         ]
       }
     };
+
     if (eventDetails.participants && eventDetails.participants.length > 0) {
       event.attendees = eventDetails.participants.map(email => ({ email }));
     }
@@ -152,7 +186,9 @@ async function createCalendarEvent(userTokens, eventDetails) {
       requestBody: event,
       sendUpdates: 'all'
     });
+
     console.log('✅ Event created successfully!');
+
     return {
       success: true,
       event: response.data,
@@ -168,6 +204,12 @@ async function createCalendarEvent(userTokens, eventDetails) {
   }
 }
 
+/**
+ * Calculate end time from start time and duration
+ * @param {string} startTime - Start time in HH:MM format
+ * @param {number} durationHours - Duration in hours (can be decimal, e.g., 1.5)
+ * @returns {string} End time in HH:MM format
+ */
 function calculateEndTime(startTime, durationHours) {
   const [hours, minutes] = startTime.split(':').map(Number);
 
@@ -178,6 +220,7 @@ function calculateEndTime(startTime, durationHours) {
     endHours += Math.floor(endMinutes / 60);
     endMinutes = endMinutes % 60;
   }
+
   if (endHours > 23 || (endHours === 23 && endMinutes > 59)) {
     endHours = 23;
     endMinutes = 59;
@@ -186,11 +229,10 @@ function calculateEndTime(startTime, durationHours) {
   return `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
 }
 
-
 module.exports = {
   getOAuthClient,   
   getAuthUrl,
   exchangeCodeForTokens,
   checkAvailability,
-  createCalendarEvent
+  createCalendarEvent,
 };
