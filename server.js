@@ -772,8 +772,10 @@ app.post('/widget/today', verifyCliqRequest, async (req, res) => {
       console.log('❌ No tokens found');
       return res.json(buildErrorWidget('Please connect your Google Calendar first using /connect command'));
     }
+
+    // Get today's date in IST
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayIST = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
     
     const { google } = require('googleapis');
     const oauth2Client = googleCalendar.getOAuthClient();
@@ -783,8 +785,8 @@ app.post('/widget/today', verifyCliqRequest, async (req, res) => {
     
     const response = await calendar.events.list({
       calendarId: 'primary',
-      timeMin: `${todayStr}T00:00:00+05:30`,
-      timeMax: `${todayStr}T23:59:59+05:30`,
+      timeMin: `${todayIST}T00:00:00+05:30`,
+      timeMax: `${todayIST}T23:59:59+05:30`,
       singleEvents: true,
       orderBy: 'startTime',
     });
@@ -792,7 +794,10 @@ app.post('/widget/today', verifyCliqRequest, async (req, res) => {
     const events = response.data.items || [];
     
     console.log(`✅ Found ${events.length} events for widget`);
-    const widgetData = buildTodayWidget(events, today, userId);
+    
+    // Pass today as Date object with IST context
+    const todayDateIST = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const widgetData = buildTodayWidget(events, todayDateIST, userId);
     
     console.log('📤 Widget structure:', JSON.stringify({
       type: widgetData.type,
@@ -811,11 +816,13 @@ app.post('/widget/today', verifyCliqRequest, async (req, res) => {
   }
 });
 
+
 function buildTodayWidget(events, currentDate, userId) {
   console.log('🔨 Building widget for', events.length, 'events');
-  
-  const now = new Date();
-  const currentTime = now.getTime();
+
+  // Use IST "now" for status calculations
+  const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const currentTime = nowIST.getTime();
 
   const upcoming = [];
   const inProgress = [];
@@ -833,6 +840,7 @@ function buildTodayWidget(events, currentDate, userId) {
       upcoming.push(event);
     }
   });
+
   const widget = {
     type: "applet",
     tabs: [
@@ -841,11 +849,11 @@ function buildTodayWidget(events, currentDate, userId) {
     active_tab: "overview",
     sections: [],
     header: {
-  title: `📅 Today - ${currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-  navigation: "new"
-}
-
+      title: `📅 Today - ${currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })}`,
+      navigation: "new"
+    }
   };
+
   const statsElements = [];
   
   statsElements.push({
@@ -866,6 +874,7 @@ function buildTodayWidget(events, currentDate, userId) {
     id: 1,
     elements: statsElements
   });
+
   if (events.length === 0) {
     const emptyElements = [];
     emptyElements.push({
@@ -888,10 +897,12 @@ function buildTodayWidget(events, currentDate, userId) {
       id: 2,
       elements: titleElements
     });
+
     events.forEach((event, idx) => {
       const start = new Date(event.start.dateTime || event.start.date);
       const end = new Date(event.end.dateTime || event.end.date);
       const duration = Math.round((end - start) / (1000 * 60 * 60) * 10) / 10;
+
       let status = '⏳';
       let statusText = 'Upcoming';
       let statusColor = 'gray';
@@ -906,28 +917,43 @@ function buildTodayWidget(events, currentDate, userId) {
         statusColor = 'blue';
       }
       
+      const startIST = start.toLocaleTimeString('en-IN', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: true,
+        timeZone: 'Asia/Kolkata'
+      });
+
+      const endIST = end.toLocaleTimeString('en-IN', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: true,
+        timeZone: 'Asia/Kolkata'
+      });
+
       const taskElements = [];
       taskElements.push({
         type: "text",
         text: `${status} **${event.summary}**\n` +
-              `⏰ ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} - ` +
-              `${end.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} ` +
+              `⏰ ${startIST} - ${endIST} ` +
               `(${duration}h) • _${statusText}_`
       });
       
-        const editButton = {
+      const editButton = {
         label: "✏️ Edit",
         type: "invoke.function",
         name: "editTaskFromWidget",
         id: `edit_${event.id}`
-        };
-        const deleteButton = {
+      };
+
+      const deleteButton = {
         label: "🗑️ Delete",
         type: "invoke.function",
         name: "deleteTaskFromWidget",
         id: `del_${event.id}`,
         emotion: "negative"
-        };
+      };
+
       taskElements.push({
         type: "buttons",
         buttons: [editButton, deleteButton]
