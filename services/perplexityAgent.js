@@ -87,13 +87,13 @@ Return ONLY valid JSON, no markdown or explanation.`;
     try {
       let cleanedResponse = aiResponse.trim();
 
-      if (cleanedResponse.startsWith('```
+      if (cleanedResponse.startsWith('```json'))
         cleanedResponse = cleanedResponse.substring(7);
       }
       if (cleanedResponse.startsWith('```')) {
         cleanedResponse = cleanedResponse.substring(3);
       }
-      if (cleanedResponse.endsWith('```
+      if (cleanedResponse.endsWith('```'))
         cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length - 3);
       }
 
