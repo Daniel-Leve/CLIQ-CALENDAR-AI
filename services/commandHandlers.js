@@ -3,6 +3,7 @@ const userManager = require('../db/userManager');
 const cliqCards = require('./cliqCards');
 const perplexityAgent = require('./perplexityAgent');
 const workLifeBalanceAI = require('./workLifeBalanceAI');
+
 async function handleTodayCommand(userId) {
   const userTokens = userManager.getUserTokens(userId);
   
@@ -13,8 +14,9 @@ async function handleTodayCommand(userId) {
   }
 
   try {
+    // Get today's date in IST
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayIST = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
     
     // Get today's events from Google Calendar
     const { google } = require('googleapis');
@@ -25,8 +27,8 @@ async function handleTodayCommand(userId) {
     
     const response = await calendar.events.list({
       calendarId: 'primary',
-      timeMin: `${todayStr}T00:00:00Z`,
-      timeMax: `${todayStr}T23:59:59Z`,
+      timeMin: `${todayIST}T00:00:00+05:30`,
+      timeMax: `${todayIST}T23:59:59+05:30`,
       singleEvents: true,
       orderBy: 'startTime',
     });
@@ -35,7 +37,7 @@ async function handleTodayCommand(userId) {
     
     if (events.length === 0) {
       return {
-        text: `📅 **Today's Schedule** - ${today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}\n\n` +
+        text: `📅 **Today's Schedule** - ${today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })}\n\n` +
               `✨ No events scheduled today!\n\n` +
               `Perfect day for deep work or catching up on tasks. 💪`
       };
@@ -46,11 +48,19 @@ async function handleTodayCommand(userId) {
       const end = new Date(event.end.dateTime || event.end.date);
       const duration = (end - start) / (1000 * 60 * 60); // hours
       
-      return `• **${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}** - ${event.summary} (${duration}h)`;
+      // Convert to IST for display
+      const startTimeIST = start.toLocaleTimeString('en-IN', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      });
+      
+      return `• **${startTimeIST}** - ${event.summary} (${duration}h)`;
     }).join('\n');
 
     return {
-      text: `📅 **Today's Schedule** - ${today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}\n\n` +
+      text: `📅 **Today's Schedule** - ${today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })}\n\n` +
             scheduleText +
             `\n\n📊 Total: ${events.length} event${events.length > 1 ? 's' : ''}`
     };
@@ -63,7 +73,7 @@ async function handleTodayCommand(userId) {
   }
 }
 
-//  Show this week's schedule
+// Show this week's schedule
 async function handleWeekCommand(userId) {
   const userTokens = userManager.getUserTokens(userId);
   
@@ -75,8 +85,11 @@ async function handleWeekCommand(userId) {
 
   try {
     const today = new Date();
-    const startOfWeek = new Date(today);
+    
+    // Get start of week in IST
+    const startOfWeek = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday
+    startOfWeek.setHours(0, 0, 0, 0);
     
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 7);
@@ -102,10 +115,16 @@ async function handleWeekCommand(userId) {
         text: `📊 **This Week's Schedule**\n\n✨ No events scheduled this week!`
       };
     }
+
     const eventsByDay = {};
     events.forEach(event => {
       const date = new Date(event.start.dateTime || event.start.date);
-      const dayKey = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const dayKey = date.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric',
+        timeZone: 'Asia/Kolkata'
+      });
       
       if (!eventsByDay[dayKey]) {
         eventsByDay[dayKey] = [];
@@ -119,7 +138,13 @@ async function handleWeekCommand(userId) {
       scheduleText += `**${day}**\n`;
       eventsByDay[day].forEach(event => {
         const start = new Date(event.start.dateTime || event.start.date);
-        scheduleText += `  • ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })} - ${event.summary}\n`;
+        const timeIST = start.toLocaleTimeString('en-IN', { 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: false,
+          timeZone: 'Asia/Kolkata'
+        });
+        scheduleText += `  • ${timeIST} - ${event.summary}\n`;
       });
       scheduleText += '\n';
     });
@@ -201,18 +226,20 @@ async function handleDeleteCommand(userId, commandArgs) {
     );
 
     if (event.time && matchingEvent) {
-      const eventStartTime = new Date(matchingEvent.start.dateTime).toLocaleTimeString('en-US', { 
+      const eventStartTime = new Date(matchingEvent.start.dateTime).toLocaleTimeString('en-IN', { 
         hour: '2-digit', 
         minute: '2-digit', 
-        hour12: false 
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
       });
       
       if (eventStartTime !== event.time) {
         matchingEvent = events.find(e => {
-          const startTime = new Date(e.start.dateTime).toLocaleTimeString('en-US', { 
+          const startTime = new Date(e.start.dateTime).toLocaleTimeString('en-IN', { 
             hour: '2-digit', 
             minute: '2-digit', 
-            hour12: false 
+            hour12: false,
+            timeZone: 'Asia/Kolkata'
           });
           return startTime === event.time && 
                  e.summary && 
@@ -224,7 +251,13 @@ async function handleDeleteCommand(userId, commandArgs) {
     if (!matchingEvent) {
       const eventList = events.map((e, i) => {
         const start = new Date(e.start.dateTime || e.start.date);
-        return `${i + 1}. **${e.summary}** at ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+        const timeIST = start.toLocaleTimeString('en-IN', { 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: false,
+          timeZone: 'Asia/Kolkata'
+        });
+        return `${i + 1}. **${e.summary}** at ${timeIST}`;
       }).join('\n');
       
       return {
@@ -232,6 +265,7 @@ async function handleDeleteCommand(userId, commandArgs) {
               `Try: \`/delete [exact event name] at [time]\``
       };
     }
+
     await calendar.events.delete({
       calendarId: 'primary',
       eventId: matchingEvent.id,
@@ -242,8 +276,8 @@ async function handleDeleteCommand(userId, commandArgs) {
     return {
       text: `✅ **Event Deleted Successfully!**\n\n` +
             `🗑️ Deleted: **${matchingEvent.summary}**\n` +
-            `📅 Date: ${startTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}\n` +
-            `⏰ Time: ${startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`
+            `📅 Date: ${startTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Kolkata' })}\n` +
+            `⏰ Time: ${startTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })}`
     };
 
   } catch (error) {
@@ -276,6 +310,7 @@ async function handleUpdateCommand(userId, commandArgs) {
   try {
     let originalEventText = commandArgs;
     let updates = {};
+
     if (commandArgs.includes(' to ') || commandArgs.includes(' change time to ')) {
       const parts = commandArgs.split(/\s+to\s+|\s+change time to\s+/i);
       originalEventText = parts[0];
@@ -296,11 +331,13 @@ async function handleUpdateCommand(userId, commandArgs) {
         updates.newTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
       }
     }
+
     if (commandArgs.includes(' move to ') || commandArgs.includes(' reschedule to ')) {
       const parts = commandArgs.split(/\s+move to\s+|\s+reschedule to\s+/i);
       originalEventText = parts[0];
       updates.newDateText = parts[1];
     }
+
     const aiResult = await perplexityAgent.extractEventDetails(originalEventText, {
       timezone: 'Asia/Kolkata',
       workHours: '09:00-18:00'
@@ -311,6 +348,7 @@ async function handleUpdateCommand(userId, commandArgs) {
         text: "❌ I couldn't understand which event to update.\n\nPlease specify the event name, date, and what to change."
       };
     }
+
     const event = aiResult.event;
     const { google } = require('googleapis');
     const oauth2Client = googleCalendar.getOAuthClient();
@@ -338,18 +376,27 @@ async function handleUpdateCommand(userId, commandArgs) {
     if (!matchingEvent) {
       const eventList = events.map((e, i) => {
         const start = new Date(e.start.dateTime || e.start.date);
-        return `${i + 1}. **${e.summary}** at ${start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+        const timeIST = start.toLocaleTimeString('en-IN', { 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: false,
+          timeZone: 'Asia/Kolkata'
+        });
+        return `${i + 1}. **${e.summary}** at ${timeIST}`;
       }).join('\n');
       
       return {
         text: `❌ Couldn't find matching event.\n\n**Events on ${event.date}:**\n${eventList}`
       };
     }
+
     const existingEvent = await calendar.events.get({
       calendarId: 'primary',
       eventId: matchingEvent.id,
     });
+
     const eventToUpdate = existingEvent.data;
+
     if (updates.newTime) {
       const currentStart = new Date(eventToUpdate.start.dateTime);
       const currentEnd = new Date(eventToUpdate.end.dateTime);
@@ -388,6 +435,7 @@ async function handleUpdateCommand(userId, commandArgs) {
         eventToUpdate.end.dateTime = newEnd.toISOString();
       }
     }
+
     const updatedEvent = await calendar.events.update({
       calendarId: 'primary',
       eventId: matchingEvent.id,
@@ -400,9 +448,9 @@ async function handleUpdateCommand(userId, commandArgs) {
     return {
       text: `✅ **Event Updated Successfully!**\n\n` +
             `📝 Event: **${updatedEvent.data.summary}**\n` +
-            `📅 New Date: ${newStart.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}\n` +
-            `⏰ New Time: ${newStart.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })} - ` +
-            `${newEnd.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}\n\n` +
+            `📅 New Date: ${newStart.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Kolkata' })}\n` +
+            `⏰ New Time: ${newStart.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })} - ` +
+            `${newEnd.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })}\n\n` +
             `🔗 [View in Calendar](${updatedEvent.data.htmlLink})`
     };
 
@@ -429,11 +477,14 @@ async function handleBalanceCommand(userId) {
   try {
     console.log('✅ User tokens found, fetching events...');
     
-    // Get events from last 7 days
-    const startDate = new Date();
+    // Get events from last 7 days in IST
+    const now = new Date();
+    const startDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     startDate.setDate(startDate.getDate() - 7);
+    startDate.setHours(0, 0, 0, 0);
     
-    const endDate = new Date();
+    const endDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    endDate.setHours(23, 59, 59, 999);
     
     console.log('📅 Date range:', startDate.toISOString(), 'to', endDate.toISOString());
     
@@ -494,6 +545,7 @@ async function handleBalanceCommand(userId) {
     };
   }
 }
+
 module.exports = {
   handleTodayCommand,
   handleWeekCommand,
@@ -501,5 +553,3 @@ module.exports = {
   handleUpdateCommand,
   handleBalanceCommand
 };
-
-
