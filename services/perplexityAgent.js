@@ -1,3 +1,5 @@
+
+
 const axios = require('axios');
 require('dotenv').config();
 
@@ -49,8 +51,8 @@ Time interpretation:
 - "morning" = 09:00-12:00 (suggest 10:00)
 - "afternoon" = 13:00-17:00 (suggest 14:00)
 - "evening" = 17:00-20:00 (suggest 18:00)
-- No time specified for meetings suggest a random time between 6:00 AM TO 6:00 PM
-- No time specified for tasks suggest a random time between 6:00 AM TO 6:00 PM
+- No time specified for meetings suggest a random between 6:00 AM and 6:00 PM
+- No time specified for tasks suggest a random between 6:00 AM and 6:00 PM
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
@@ -83,17 +85,19 @@ Return ONLY valid JSON, no markdown or explanation.`;
     const aiResponse = response.data.choices[0].message.content;
     console.log('📊 Perplexity AI Response:', aiResponse);
 
+    // Parse JSON response
     let eventData;
     try {
       let cleanedResponse = aiResponse.trim();
 
-      if (cleanedResponse.startsWith('```json'))
+      // Remove markdown code blocks if present
+      if (cleanedResponse.startsWith('```json')){
         cleanedResponse = cleanedResponse.substring(7);
       }
       if (cleanedResponse.startsWith('```')) {
         cleanedResponse = cleanedResponse.substring(3);
       }
-      if (cleanedResponse.endsWith('```'))
+      if (cleanedResponse.endsWith('```')){
         cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length - 3);
       }
 
@@ -109,6 +113,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
       };
     }
 
+    // Validate required fields
     if (!eventData.title || !eventData.date) {
       return {
         success: false,
@@ -153,7 +158,7 @@ Return JSON with suggested schedule for each task.`;
     const response = await axios.post(
       PERPLEXITY_API_URL,
       {
-        model: 'llama-3.1-sonar-small-128k-online',
+        model: 'sonar',
         messages: [
           {
             role: 'system',
