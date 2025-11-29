@@ -518,8 +518,7 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
       timeMin: `${todayISO}T00:00:00+05:30`,
       timeMax: `${todayISO}T23:59:59+05:30`,
       singleEvents: true,
-      orderBy: 'startTime',
-      timeZone: baseTz
+      orderBy: 'startTime'
     });
 
     const events = response.data.items || [];
@@ -539,12 +538,12 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
       const startRaw = new Date(event.start.dateTime || event.start.date);
       const endRaw   = new Date(event.end.dateTime   || event.end.date);
 
+      // Convert to IST
       const startIST = new Date(startRaw.toLocaleString('en-US', { timeZone: baseTz }));
       const endIST   = new Date(endRaw.toLocaleString('en-US', { timeZone: baseTz }));
 
       const duration = (endIST - startIST) / (1000 * 60 * 60); // hours
 
-      // All‑day events may show as 00:00; still include them as tasks
       const currentTime = startIST.toLocaleTimeString('en-IN', { 
         hour: '2-digit', 
         minute: '2-digit', 
@@ -593,7 +592,6 @@ app.post('/command/suggestplan', verifyCliqRequest, async (req, res) => {
     });
   }
 });
-
 
 
 function buildOptimizedPlanCard(currentTasks, optimizedPlan, summary) {
