@@ -382,7 +382,7 @@ async function handleUpdateCommand(userId, commandArgs) {
 
    if (!matchingEvent) {
   return {
-    text: `❌ Couldn't find "${event.title}" on ${new Date(event.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Kolkata' })}.\n\n` +
+    text: `❌ Couldn't find "${event.title}"\n\n` +
           `**Update syntax:**\n` +
           `• Time: \`/update [event] to [time]\`\n` +
           `• Date: \`/update [event] move to [date]\`\n` +
