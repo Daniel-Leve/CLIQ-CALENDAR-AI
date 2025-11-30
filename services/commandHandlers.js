@@ -380,35 +380,17 @@ async function handleUpdateCommand(userId, commandArgs) {
       e.summary && e.summary.toLowerCase().includes(event.title.toLowerCase())
     );
 
-    if (!matchingEvent) {
-      const baseTz = 'Asia/Kolkata';
-      
-      // Format event list with IST times
-      const eventList = events.map((e, i) => {
-        const startRaw = new Date(e.start.dateTime || e.start.date);
-        const startIST = new Date(startRaw.toLocaleString('en-US', { timeZone: baseTz }));
-        
-        const timeIST = startIST.toLocaleTimeString('en-IN', { 
-          hour: '2-digit', 
-          minute: '2-digit', 
-          hour12: false,
-          timeZone: baseTz
-        });
-        
-        return `${i + 1}. **${e.summary}** at ${timeIST}`;
-      }).join('\n');
-      
-      const formattedDate = new Date(event.date).toLocaleDateString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        timeZone: baseTz
-      });
-      
-      return {
-        text: `❌ Couldn't find matching event.\n\n**Events on ${formattedDate}:**\n${eventList || '(No events)'}`
-      };
-    }
+   if (!matchingEvent) {
+  return {
+    text: `❌ Couldn't find "${event.title}" on ${new Date(event.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'Asia/Kolkata' })}.\n\n` +
+          `**Update syntax:**\n` +
+          `• Time: \`/update [event] to [time]\`\n` +
+          `• Date: \`/update [event] move to [date]\`\n` +
+          `• Both: \`/update [event] move to [date] [time]\`\n\n` +
+          `Example: \`/update meeting today move to tomorrow 3 PM\``
+  };
+}
+
 
     // Get full event details
     const existingEvent = await calendar.events.get({
