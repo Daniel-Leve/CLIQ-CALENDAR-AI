@@ -288,6 +288,7 @@ async function handleDeleteCommand(userId, commandArgs) {
   }
 }
 
+
 async function handleUpdateCommand(userId, commandArgs) {
   const userTokens = userManager.getUserTokens(userId);
   
@@ -301,7 +302,7 @@ async function handleUpdateCommand(userId, commandArgs) {
     return {
       text: "❌ Please specify what to update.\n\n" +
             "**Examples:**\n" +
-            "• `/update meeting tomorrow at 3 PM to 4 PM`\n" +
+            "• `/update meeting today at 2 PM move to tomorrow 3 PM`\n" +
             "• `/update team standup change time to 11 AM`\n" +
             "• `/update presentation next Monday move to Tuesday`"
     };
@@ -311,6 +312,7 @@ async function handleUpdateCommand(userId, commandArgs) {
     let originalEventText = commandArgs;
     let updates = {};
 
+    // Parse time changes (to/change time to)
     if (commandArgs.includes(' to ') || commandArgs.includes(' change time to ')) {
       const parts = commandArgs.split(/\s+to\s+|\s+change time to\s+/i);
       originalEventText = parts[0];
@@ -332,12 +334,14 @@ async function handleUpdateCommand(userId, commandArgs) {
       }
     }
 
+    // Parse date changes (move to/reschedule to)
     if (commandArgs.includes(' move to ') || commandArgs.includes(' reschedule to ')) {
       const parts = commandArgs.split(/\s+move to\s+|\s+reschedule to\s+/i);
       originalEventText = parts[0];
       updates.newDateText = parts[1];
     }
 
+    // Extract event details with IST context
     const aiResult = await perplexityAgent.extractEventDetails(originalEventText, {
       timezone: 'Asia/Kolkata',
       workHours: '09:00-18:00'
@@ -350,12 +354,14 @@ async function handleUpdateCommand(userId, commandArgs) {
     }
 
     const event = aiResult.event;
+    
     const { google } = require('googleapis');
     const oauth2Client = googleCalendar.getOAuthClient();
     oauth2Client.setCredentials(userTokens);
     
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
     
+    // Query events for the date in IST
     const startDateTime = `${event.date}T00:00:00+05:30`;
     const endDateTime = `${event.date}T23:59:59+05:30`;
     
@@ -369,27 +375,42 @@ async function handleUpdateCommand(userId, commandArgs) {
 
     const events = response.data.items || [];
     
+    // Find matching event by title
     let matchingEvent = events.find(e => 
       e.summary && e.summary.toLowerCase().includes(event.title.toLowerCase())
     );
 
     if (!matchingEvent) {
+      const baseTz = 'Asia/Kolkata';
+      
+      // Format event list with IST times
       const eventList = events.map((e, i) => {
-        const start = new Date(e.start.dateTime || e.start.date);
-        const timeIST = start.toLocaleTimeString('en-IN', { 
+        const startRaw = new Date(e.start.dateTime || e.start.date);
+        const startIST = new Date(startRaw.toLocaleString('en-US', { timeZone: baseTz }));
+        
+        const timeIST = startIST.toLocaleTimeString('en-IN', { 
           hour: '2-digit', 
           minute: '2-digit', 
           hour12: false,
-          timeZone: 'Asia/Kolkata'
+          timeZone: baseTz
         });
+        
         return `${i + 1}. **${e.summary}** at ${timeIST}`;
       }).join('\n');
       
+      const formattedDate = new Date(event.date).toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        timeZone: baseTz
+      });
+      
       return {
-        text: `❌ Couldn't find matching event.\n\n**Events on ${event.date}:**\n${eventList}`
+        text: `❌ Couldn't find matching event.\n\n**Events on ${formattedDate}:**\n${eventList || '(No events)'}`
       };
     }
 
+    // Get full event details
     const existingEvent = await calendar.events.get({
       calendarId: 'primary',
       eventId: matchingEvent.id,
@@ -397,40 +418,39 @@ async function handleUpdateCommand(userId, commandArgs) {
 
     const eventToUpdate = existingEvent.data;
 
+    // Update time if specified
     if (updates.newTime) {
-  // If event has only date (all-day) handle separately:
-  if (eventToUpdate.start.date) {
-    // it's an all-day event — can't set time-of-day; you may want to turn it into a dateTime event
-    // For now, return an error or convert per your app's rules
-    return { text: "❌ Cannot set time for an all-day event. Please provide a timed event." };
-  }
+      // Check if all-day event
+      if (eventToUpdate.start.date) {
+        return { 
+          text: "❌ Cannot set specific time for an all-day event. Please update it in Google Calendar directly." 
+        };
+      }
 
-  // original start and end ISO strings (keep the original timezone offset string)
-  const origStartISO = eventToUpdate.start.dateTime; // e.g. "2025-11-29T14:00:00+05:30"
-  const origEndISO   = eventToUpdate.end.dateTime;
+      // Get original ISO strings
+      const origStartISO = eventToUpdate.start.dateTime;
+      const origEndISO = eventToUpdate.end.dateTime;
 
-  // extract date part from the original ISO (the left side of 'T')
-  const datePart = origStartISO.split('T')[0]; // "2025-11-29"
+      // Extract date part
+      const datePart = origStartISO.split('T')[0];
 
-  // updates.newTime is "HH:MM" in 24-hour format from your earlier parsing, e.g. "14:00"
-  // compose an ISO string explicitly using the Asia/Kolkata offset
-  const newStartISOWithTZ = `${datePart}T${updates.newTime}:00+05:30`;
+      // Compose new start with IST offset
+      const newStartISOWithTZ = `${datePart}T${updates.newTime}:00+05:30`;
 
-  // compute duration in ms from original start/end (safer than reconstructing hours)
-  const origStart = new Date(origStartISO);
-  const origEnd = new Date(origEndISO);
-  const durationMs = origEnd.getTime() - origStart.getTime();
+      // Calculate duration
+      const origStart = new Date(origStartISO);
+      const origEnd = new Date(origEndISO);
+      const durationMs = origEnd.getTime() - origStart.getTime();
 
-  // create newStart Date from the composed ISO and then compute newEnd by adding durationMs
-  const newStart = new Date(newStartISOWithTZ);
-  const newEnd = new Date(newStart.getTime() + durationMs);
+      // Create new start and end
+      const newStart = new Date(newStartISOWithTZ);
+      const newEnd = new Date(newStart.getTime() + durationMs);
 
-  // set the event datetimes to ISO (Google Calendar accepts the full ISO with offset)
-  eventToUpdate.start.dateTime = newStart.toISOString(); // JS will convert to UTC Z format
-  eventToUpdate.end.dateTime   = newEnd.toISOString();
-}
-
+      eventToUpdate.start.dateTime = newStart.toISOString();
+      eventToUpdate.end.dateTime = newEnd.toISOString();
+    }
     
+    // Update date if specified
     if (updates.newDateText) {
       const newDateAI = await perplexityAgent.extractEventDetails(`event on ${updates.newDateText}`, {
         timezone: 'Asia/Kolkata'
@@ -453,12 +473,14 @@ async function handleUpdateCommand(userId, commandArgs) {
       }
     }
 
+    // Update the event in Google Calendar
     const updatedEvent = await calendar.events.update({
       calendarId: 'primary',
       eventId: matchingEvent.id,
       requestBody: eventToUpdate,
     });
 
+    // Format response with IST times
     const newStart = new Date(updatedEvent.data.start.dateTime);
     const newEnd = new Date(updatedEvent.data.end.dateTime);
     
@@ -478,6 +500,7 @@ async function handleUpdateCommand(userId, commandArgs) {
     };
   }
 }
+
 
 async function handleBalanceCommand(userId) {
   console.log('📊 Balance command called for user:', userId);
